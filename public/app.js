@@ -269,6 +269,7 @@ function go(v){
   if(v==="mitschrift") M.onShow();
 }
 document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>go(t.dataset.view)));
+document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>go(b.dataset.go)));
 window.addEventListener("hashchange",()=>go(location.hash.slice(1)));
 
 /* ---------- E-Examen-Editor ---------- */

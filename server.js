@@ -80,7 +80,9 @@ function cookies(req) {
   for (const part of (req.headers.cookie || "").split(";")) { const i = part.indexOf("="); if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim()); }
   return out;
 }
-function isSecure(req) { return req.headers["x-forwarded-proto"] === "https" || !!req.socket.encrypted; }
+function isSecure(req) { return req.headers["x-forwarded-proto"] === "https" || /"scheme":"https"/.test(req.headers["cf-visitor"] || "") || !!req.socket.encrypted; }
+// Hinter dem Cloudflare-Tunnel kommt jede Anfrage von 127.0.0.1; die echte IP steht in CF-Connecting-IP.
+function clientIp(req) { return req.headers["cf-connecting-ip"] || req.socket.remoteAddress; }
 const attempts = new Map();
 function tooManyAttempts(ip) {
   const now = Date.now(), list = (attempts.get(ip) || []).filter((t) => now - t < 15 * 60e3);
@@ -163,7 +165,7 @@ body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--
 form{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:28px;display:grid;gap:14px;width:min(360px,100%)}
 h1{font:700 1.5rem Bitter,Georgia,serif;margin:0}h1 span{color:var(--accent)}p{margin:0;color:var(--muted)}
 input{font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}
-button{font:600 1rem inherit;font-family:inherit;padding:10px;border-radius:8px;border:0;background:var(--ink);color:var(--bg);cursor:pointer}
+button{font-family:inherit;font-weight:600;font-size:1rem;padding:10px;border-radius:8px;border:0;background:var(--ink);color:var(--bg);cursor:pointer}
 .err{color:var(--wrong);min-height:1.5em}</style></head><body>
 <form id="f"><h1>Gutachten<span>·</span>Tipptrainer</h1><p>Bitte melde dich an.</p>
 <input type="password" id="pw" autocomplete="current-password" placeholder="Passwort" aria-label="Passwort" autofocus required>
@@ -214,7 +216,7 @@ async function handle(req, res) {
 
   if (p === "/login") return authed ? send(res, 302, "", { Location: "/" }) : send(res, 200, LOGIN_HTML, { "Content-Type": "text/html; charset=utf-8" });
   if (p === "/api/login" && req.method === "POST") {
-    const ip = req.headers["x-forwarded-for"]?.split(",")[0].trim() || req.socket.remoteAddress;
+    const ip = clientIp(req);
     if (tooManyAttempts(ip)) return send(res, 429, { code: "too_many" });
     const { password } = await readJSON(req, 10_000);
     const ok = cfg && typeof password === "string" && crypto.timingSafeEqual(Buffer.from(hashPassword(password, cfg.salt), "hex"), Buffer.from(cfg.hash, "hex"));

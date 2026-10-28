@@ -1,108 +1,64 @@
-# Gutachten-Tipptrainer auf dem eigenen VPS
+# Gutachten-Tipptrainer auf dem eigenen VPS (mit Cloudflare Tunnel)
 
-Diese Anleitung geht von einem frischen Ubuntu- oder Debian-Server aus, auf dem du dich per SSH als `root` (oder mit `sudo`) anmeldest. Rechne mit etwa 20 Minuten.
+Diese Anleitung geht von einem frischen Ubuntu- oder Debian-Server aus, auf dem du dich per SSH als `root` anmeldest. Rechne mit etwa 15 Minuten.
 
 Du brauchst:
 
 - einen VPS mit Ubuntu 22.04/24.04 oder Debian 12
-- eine Domain oder Subdomain, die auf die IP-Adresse des VPS zeigt (z. B. `jura.deinname.de`). Ohne Domain geht es auch, siehe Abschnitt „Ohne Domain“.
+- eine Domain, deren DNS bei Cloudflare verwaltet wird (z. B. `jura.deinname.de`), und ein kostenloses Cloudflare-Konto
 - einen DeepSeek-API-Schlüssel von platform.deepseek.com
 
-## 1. Node.js installieren
+Der Tipptrainer lauscht nur auf `127.0.0.1:3000`. Von außen erreichbar ist er ausschließlich über den Cloudflare-Tunnel. Der Server braucht dafür keine offenen Ports außer SSH.
+
+## 1. Cloudflare-Tunnel anlegen (im Browser)
+
+1. Im Cloudflare-Dashboard: **Zero Trust › Networks › Tunnels › Create a tunnel › Cloudflared**.
+2. Einen Namen vergeben, z. B. `tipptrainer`.
+3. Bei der Installation erscheint ein Befehl mit einem langen Token (`eyJ…`). Kopiere nur das Token, den Rest brauchst du nicht.
+4. Weiter zu **Public Hostname**: Subdomain `jura`, Domain `deinname.de`, Service **HTTP** und URL `localhost:3000`. Speichern.
+
+## 2. Installation auf dem Server
+
+Auf dem Server als `root` ausführen. Ersetze die beiden Werte in Hochkommas:
 
 ```bash
-apt update && apt install -y curl unzip
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt install -y nodejs
-node -v   # sollte v20.x anzeigen
+apt-get update && apt-get install -y git
+git clone https://github.com/lukas04545/New... /opt/gutachten-trainer
+cd /opt/gutachten-trainer
+TUNNEL_TOKEN='DEIN-TUNNEL-TOKEN' DEEPSEEK_API_KEY='DEIN-DEEPSEEK-SCHLÜSSEL' bash install.sh
 ```
 
-## 2. Programm hochladen und einrichten
+Das Skript installiert Node.js 20 und `cloudflared`, legt den Systembenutzer `tipptrainer` an, installiert die Abhängigkeiten, startet den Dienst und richtet den Tunnel als Dienst ein. Zum Schluss fragt es nach dem Passwort (mindestens 10 Zeichen).
 
-Lade `Gutachten-Tipptrainer-Server.zip` auf den Server, z. B. von deinem Rechner aus:
+Falls das Repo privat ist, bitte vorher einen GitHub-Zugang einrichten. Ohne Git kannst du das Projekt auch per `scp` hochladen und das Skript im Ordner starten.
+
+## 3. Prüfen
 
 ```bash
-scp Gutachten-Tipptrainer-Server.zip root@DEINE-SERVER-IP:/opt/
+systemctl status gutachten-trainer cloudflared   # beide sollten "active (running)" zeigen
+journalctl -u gutachten-trainer -f               # Protokoll des Tipptrainers
 ```
 
-Dann auf dem Server:
+Dann `https://jura.deinname.de` im Browser öffnen und mit deinem Passwort anmelden.
+
+## Passwort ändern
 
 ```bash
-cd /opt
-unzip Gutachten-Tipptrainer-Server.zip
-cd gutachten-trainer
-useradd --system --home /opt/gutachten-trainer --shell /usr/sbin/nologin tipptrainer
-npm install --omit=dev
-cp .env.example .env
-nano .env
+cd /opt/gutachten-trainer && npm run passwort && chown -R tipptrainer:tipptrainer /opt/gutachten-trainer
+systemctl restart gutachten-trainer
 ```
 
-In `.env` trägst du bei `DEEPSEEK_API_KEY=` deinen Schlüssel ein und speicherst mit Strg+O, Enter, Strg+X.
-
-`npm install` lädt die Bibliotheken für PDF, Word und die Texterkennung von Folien. Klappt das nicht, läuft das Programm trotzdem und lädt diese Bibliotheken im Browser aus dem Internet.
-
-## 3. Passwort festlegen
-
-```bash
-npm run passwort
-chown -R tipptrainer:tipptrainer /opt/gutachten-trainer
-chmod 600 .env data/config.json
-```
-
-Mit `npm run passwort` kannst du das Passwort jederzeit ändern. Danach sind alle Geräte abgemeldet. Führe anschließend den `chown`-Befehl erneut aus.
-
-## 4. Als Dienst starten
-
-```bash
-cp gutachten-trainer.service /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now gutachten-trainer
-systemctl status gutachten-trainer   # sollte "active (running)" zeigen
-```
-
-Der Dienst startet nach einem Neustart des Servers automatisch. Protokoll ansehen: `journalctl -u gutachten-trainer -f`
-
-## 5. HTTPS mit Caddy
-
-Der Tipptrainer lauscht nur intern auf Port 3000. Caddy stellt ihn mit HTTPS-Zertifikat nach außen bereit. Ohne HTTPS würde dein Passwort unverschlüsselt übertragen.
-
-```bash
-apt install -y debian-keyring debian-archive-keyring apt-transport-https
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
-apt update && apt install -y caddy
-```
-
-Dann `/etc/caddy/Caddyfile` öffnen (`nano /etc/caddy/Caddyfile`), den Inhalt ersetzen durch
-
-```
-jura.deinname.de {
-    reverse_proxy 127.0.0.1:3000
-    request_body {
-        max_size 100MB
-    }
-}
-```
-
-und neu laden:
-
-```bash
-systemctl reload caddy
-```
-
-Falls eine Firewall aktiv ist: `ufw allow 80,443/tcp`
-
-Jetzt `https://jura.deinname.de` im Browser öffnen und mit deinem Passwort anmelden.
+Danach sind alle Geräte abgemeldet.
 
 ## Ohne Domain
 
-Lass Caddy weg und öffne von deinem Rechner aus einen SSH-Tunnel:
+Ohne eigene Domain kannst du den Cloudflare-Tunnel weglassen und stattdessen per SSH-Tunnel zugreifen:
 
 ```bash
 ssh -L 3000:127.0.0.1:3000 root@DEINE-SERVER-IP
 ```
 
-Solange das Fenster offen ist, erreichst du den Tipptrainer unter `http://localhost:3000`.
+Solange das Fenster offen ist, erreichst du den Tipptrainer unter `http://localhost:3000`. Dafür Schritt 2 ohne `TUNNEL_TOKEN` ausführen, dann wird kein Tunnel eingerichtet.
 
 ## Wo liegen deine Daten?
 
@@ -119,13 +75,14 @@ Sichern: `tar czf jura-backup-$(date +%F).tgz -C /opt/gutachten-trainer data` un
 
 ## Aktualisieren
 
-Neue Version hochladen, entpacken und den Ordner `data` sowie die Datei `.env` behalten. Danach:
-
 ```bash
-cd /opt/gutachten-trainer && npm install --omit=dev
+cd /opt/gutachten-trainer && git pull
+npm install --omit=dev
 chown -R tipptrainer:tipptrainer /opt/gutachten-trainer
 systemctl restart gutachten-trainer
 ```
+
+Der Ordner `data` und die Datei `.env` bleiben dabei unverändert.
 
 ## Kosten der KI
 
