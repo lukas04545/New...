@@ -258,7 +258,7 @@ $("restart").addEventListener("click",load);
 /* ---------- Navigation ---------- */
 let view="trainer";
 function go(v){
-  if(!["trainer","examen","mitschrift","vorlesungen","bibliothek"].includes(v)) v="trainer";
+  if(!["trainer","examen","mitschrift","vorlesungen","bibliothek","lesen"].includes(v)) v="trainer";
   view=v;
   document.querySelectorAll(".view").forEach(s=>s.style.display=s.id==="v-"+v?"grid":"none");
   document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected",t.dataset.view===v));
@@ -268,6 +268,8 @@ function go(v){
   if(v==="examen"&&!X.running) renderExamIdle();
   if(v==="mitschrift") M.onShow();
   if(v==="bibliothek") renderBib();
+  if(v==="lesen") renderRead();
+  document.querySelector(".content .topbar")?.classList.remove("nav-open"); $("navToggle")?.setAttribute("aria-expanded","false");
 }
 document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>go(t.dataset.view)));
 document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>go(b.dataset.go)));
@@ -809,14 +811,83 @@ function cleanUnit(d,{rg,vname,datum}){
 }
 
 /* ---------- Bibliothek ---------- */
-/* Seitenleiste: Rechtsgebiete › Teilgebiete › Einheiten, Klick öffnet die Einheit im Tipptrainer */
+/* ---------- Lerneinheit lesen: Pfad, Titel, gegliederter Text, Schlagwörter und Fälle wie eine Lernseite ---------- */
+let readState=null; // {id} für eine Einheit oder {rg,tg,kind:"faelle"|"schemata"} für ein Teilgebiet
+const ROMAN=["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX"];
+const rgOfU=u=>RG_ORDER.includes(u.rechtsgebiet)?u.rechtsgebiet:"Grundlagen";
+const tgOfU=u=>u.teilgebiet||"Allgemein";
+// Innerhalb eines Teilgebiets in Vorlesungsreihenfolge, damit die Nummern I, II, III … stabil bleiben
+const tgUnits=(rg,tg)=>units.filter(u=>rgOfU(u)===rg&&tgOfU(u)===tg).sort((a,b)=>(a.datum||"").localeCompare(b.datum||"")||(a.created||0)-(b.created||0));
+const isMobile=()=>matchMedia("(max-width:820px)").matches;
+function toggleSide(){document.querySelector(".shell").classList.toggle(isMobile()?"side-open":"side-closed");}
+function closeSideMobile(){if(isMobile()) document.querySelector(".shell").classList.remove("side-open");}
+function openCase(u,idx){collId=u.id; lsSet("gt-coll",u.id); caseIdx=idx; refreshCases(); go("trainer");}
+function openRead(st){readState=st; renderTree(); renderRead(); go("lesen"); closeSideMobile(); window.scrollTo(0,0);}
+
 function renderTree(){
   const t=$("tree"); if(!t) return;
-  const by={}; units.forEach(u=>{const r=RG_ORDER.includes(u.rechtsgebiet)?u.rechtsgebiet:"Grundlagen"; (by[r]=by[r]||{}); const tg=u.teilgebiet||"Allgemein"; (by[r][tg]=by[r][tg]||[]).push(u);});
-  t.innerHTML=RG_ORDER.filter(r=>by[r]).map(r=>`<details open><summary>${esc(r)}</summary>${Object.keys(by[r]).sort((a,b)=>a.localeCompare(b,"de")).map(tg=>`<details open class="tg"><summary>${esc(tg)}</summary>${by[r][tg].map(u=>`<button class="unit-link" type="button" data-id="${esc(u.id)}">${esc(u.thema)}</button>`).join("")}</details>`).join("")}</details>`).join("")||`<p class="side-empty">Noch keine Einheiten.</p>`;
-  t.querySelectorAll(".unit-link").forEach(b=>b.addEventListener("click",()=>unitAction("type",b.dataset.id,b)));
+  const st=readState||{};
+  const by={}; units.forEach(u=>{(by[rgOfU(u)]=by[rgOfU(u)]||new Set()).add(tgOfU(u));});
+  t.innerHTML=RG_ORDER.filter(r=>by[r]).map(r=>`<details open class="rg"><summary>${esc(r)}</summary>${[...by[r]].sort((a,b)=>a.localeCompare(b,"de")).map(tg=>{
+    const us=tgUnits(r,tg), here=us.some(u=>u.id===st.id)||(st.rg===r&&st.tg===tg);
+    const nF=us.reduce((a,u)=>a+(u.faelle?.length||0),0), nS=us.reduce((a,u)=>a+(u.schemata?.length||0),0);
+    const extra=(kind,label,cls)=>`<button class="unit-link ${cls}${here&&st.kind===kind?" on":""}" type="button" data-rg="${esc(r)}" data-tg="${esc(tg)}" data-kind="${kind}"><span class="ut">${label}</span></button>`;
+    return `<details class="tg"${here?" open":""}><summary>${esc(tg)}</summary>${us.map((u,i)=>`<button class="unit-link${u.id===st.id?" on":""}" type="button" data-id="${esc(u.id)}"><span class="rn">${ROMAN[i]||i+1}</span><span class="ut">${esc(u.thema)}</span></button>`).join("")}${nF?extra("faelle","Fälle","xf"):""}${nS?extra("schemata","Prüfungsschemata","xs"):""}</details>`;
+  }).join("")}</details>`).join("")||`<p class="side-empty">Noch keine Einheiten. Lade unter „Vorlesungen“ Material hoch.</p>`;
+  t.querySelectorAll("[data-id]").forEach(b=>b.onclick=()=>openRead({id:b.dataset.id}));
+  t.querySelectorAll("[data-kind]").forEach(b=>b.onclick=()=>openRead({rg:b.dataset.rg,tg:b.dataset.tg,kind:b.dataset.kind}));
 }
-function renderLib(){ renderTree(); renderBib(); }
+
+function renderRead(){
+  const c=$("lCrumbs"), t=$("lTitle"), b=$("lBody"), bar=$("lBar");
+  const crumbs=parts=>parts.map(p=>`<span>${esc(p)}</span>`).join('<span class="sep">›</span>');
+  const nt=x=>x.norm?`, ${esc(x.norm)}`:"";
+  const u=readState?.id&&units.find(x=>x.id===readState.id);
+  bar.hidden=true;
+  if(u){
+    c.innerHTML=crumbs([rgOfU(u),tgOfU(u),u.thema]); t.textContent=u.thema;
+    const secs=[];
+    if(u.definitionen?.length) secs.push(["Definitionen",u.definitionen.map((d,i)=>`<h4>${i+1}. ${esc(d.begriff)}${nt(d)}</h4><p>${esc(d.definition)}</p>`).join("")]);
+    if(u.streite?.length) secs.push(["Streitstände",u.streite.map((s,i)=>`<h4>${i+1}. ${esc(s.frage)}${nt(s)}</h4>${(s.ansichten||[]).map(a=>`<p><b>${esc(a.name)}:</b> ${esc(a.inhalt)}${a.argumente?` <i>Dafür spricht:</i> ${esc(a.argumente)}`:""}</p>`).join("")}${s.stellungnahme?`<p><b>Stellungnahme:</b> ${esc(s.stellungnahme)}</p>`:""}${s.gutachten?.length?`<p class="lgut">${esc(s.gutachten.map(g=>g.t).join(" "))}</p>`:""}`).join("")]);
+    if(u.schemata?.length) secs.push(["Prüfungsschemata",u.schemata.map((s,i)=>`<h4>${i+1}. ${esc(s.titel)}${nt(s)}</h4><p class="lpts">${esc((s.punkte||[]).join("\n"))}</p>`).join("")]);
+    if(u.fragen?.length) secs.push(["Lernfragen",u.fragen.map(q=>`<details class="lq"><summary>${esc(q.frage)}</summary><p>${esc(q.antwort||"Keine Antwort hinterlegt.")}</p></details>`).join("")]);
+    const norms=[...new Set([...(u.definitionen||[]),...(u.streite||[]),...(u.schemata||[]),...(u.faelle||[])].map(x=>String(x.norm||"").trim()).filter(Boolean))];
+    const related=tgUnits(rgOfU(u),tgOfU(u)).filter(x=>x.id!==u.id);
+    const meta=[u.veranstaltung,u.datum&&new Date(u.datum+"T12:00").toLocaleDateString("de-DE")].filter(Boolean).join(" · ");
+    b.innerHTML=`<h2>${esc(u.thema)}</h2>${meta?`<p class="lmeta">${esc(meta)}</p>`:""}${u.zusammenfassung?`<p>${esc(u.zusammenfassung)}</p>`:""}
+      ${secs.map(([h,x],i)=>`<h3>${ROMAN[i]}. ${h}</h3>${x}`).join("")}
+      ${secs.length?"":`<p class="empty">Diese Einheit enthält nur Fälle zum Abtippen.</p>`}
+      ${norms.length||related.length?`<h5>Schlagwörter und verwandte Lerneinheiten</h5><div class="chips">${norms.map(n=>`<button class="chip" type="button" data-norm="${esc(n)}">${esc(n)}</button>`).join("")}${related.map(r=>`<button class="chip" type="button" data-unit="${esc(r.id)}">${esc(r.thema)}</button>`).join("")}</div>`:""}
+      ${u.faelle?.length?`<h5>Relevante Fälle</h5><div class="chips">${u.faelle.map((f,i)=>`<button class="chip" type="button" data-case="${i}">Fall: ${esc(f.title)}</button>`).join("")}</div>`:""}`;
+    bar.innerHTML=`<button class="pbtn small" type="button" data-act="type">Tippen</button><button class="pbtn small ghost" type="button" data-act="exam">Im E-Examen</button>${u.karten?.length?`<button class="pbtn small ghost" type="button" data-act="cards">Lernkarten (${dueCount(u)} fällig)</button>`:hasStoff(u)?`<button class="pbtn small ghost" type="button" data-act="cardgen">Karteikarten erstellen</button>`:""}${u.fragen?.length?`<button class="pbtn small ghost" type="button" data-act="quiz">Abfragen</button>`:""}<button class="pbtn small ghost" type="button" data-act="export">Exportieren</button>`;
+    bar.hidden=false;
+    b.querySelectorAll("[data-norm]").forEach(x=>x.onclick=()=>{$("bq").value=x.dataset.norm; bKind="alle"; go("bibliothek");});
+    b.querySelectorAll("[data-unit]").forEach(x=>x.onclick=()=>openRead({id:x.dataset.unit}));
+    b.querySelectorAll("[data-case]").forEach(x=>x.onclick=()=>openCase(u,+x.dataset.case));
+    bar.querySelectorAll("[data-act]").forEach(x=>x.onclick=()=>unitAction(x.dataset.act,u.id,x));
+    return;
+  }
+  if(readState?.kind){
+    const {rg,tg,kind}=readState, us=tgUnits(rg,tg), faelle=kind==="faelle";
+    c.innerHTML=crumbs([rg,tg,faelle?"Fälle":"Prüfungsschemata"]); t.textContent=faelle?`Fälle: ${tg}`:`Prüfungsschemata: ${tg}`;
+    // Fälle stehen in der Fallliste einer Einheit vorne, die Schemata direkt dahinter
+    const items=us.flatMap(x=>faelle
+      ?(x.faelle||[]).map((f,i)=>`<div class="lcase"><h4>${esc(f.title)}${nt(f)}</h4>${f.sachverhalt?`<p>${esc(f.sachverhalt)}</p>`:""}${f.frage?`<p><i>${esc(f.frage)}</i></p>`:""}<div class="row-btn"><button class="pbtn small" type="button" data-u="${esc(x.id)}" data-case="${i}">Tippen</button><span class="bsrc">aus ${esc(x.thema)}</span></div></div>`)
+      :(x.schemata||[]).map((s,i)=>`<div class="lcase"><h4>${esc(s.titel)}${nt(s)}</h4><p class="lpts">${esc((s.punkte||[]).join("\n"))}</p><div class="row-btn"><button class="pbtn small ghost" type="button" data-u="${esc(x.id)}" data-case="${(x.faelle?.length||0)+i}">Abtippen</button><span class="bsrc">aus ${esc(x.thema)}</span></div></div>`));
+    b.innerHTML=items.join("")||`<p class="empty">Hier gibt es noch nichts.</p>`;
+    b.querySelectorAll("[data-u]").forEach(x=>x.onclick=()=>openCase(units.find(v=>v.id===x.dataset.u),+x.dataset.case));
+    return;
+  }
+  c.innerHTML=""; t.textContent="Lerneinheit";
+  b.innerHTML=`<p class="empty">Wähle unter „Rechtsgebiete“ eine Lerneinheit. Auf dem Handy öffnest du die Liste über ☰ oben links.</p>`;
+}
+$("navToggle").onclick=()=>{const o=document.querySelector(".content .topbar").classList.toggle("nav-open"); $("navToggle").setAttribute("aria-expanded",o);};
+$("sideToggle").onclick=toggleSide;
+$("sideClose").onclick=toggleSide;
+$("sideBack").onclick=closeSideMobile;
+$("sideSearch").onclick=()=>{closeSideMobile(); go("bibliothek"); $("bq").focus();};
+
+function renderLib(){ renderTree(); renderBib(); if(view==="lesen") renderRead(); }
 
 /* ---------- Bibliothek: alle Definitionen, Streite, Schemata, Mitschriften und Einheiten an einem Ort ---------- */
 let bKind="alle";
@@ -875,7 +946,7 @@ function unitCard(u){
     : hasStoff(u) ? `<button class="pbtn small ghost" type="button" data-act="cardgen" data-id="${u.id}">Karteikarten erstellen</button>` : "";
   const files=(u.files||[]).map(f=>`<a class="pbtn small ghost" style="text-decoration:none" href="/api/files?unit=${encodeURIComponent(u.id)}&name=${encodeURIComponent(f.name)}" download>${esc(f.name.length>28?f.name.slice(0,26)+"…":f.name)}</a>`).join("");
   return `<div class="unit"><b>${esc(u.thema)}</b><span class="meta">${esc(meta)}</span>${u.zusammenfassung?`<p>${esc(u.zusammenfassung)}</p>`:""}
-   <div class="row-btn"><button class="pbtn small" type="button" data-act="type" data-id="${u.id}">Tippen</button>
+   <div class="row-btn"><button class="pbtn small" type="button" data-act="read" data-id="${u.id}">Lesen</button><button class="pbtn small ghost" type="button" data-act="type" data-id="${u.id}">Tippen</button>
    <button class="pbtn small ghost" type="button" data-act="exam" data-id="${u.id}">Im E-Examen</button>
    ${u.fragen?.length?`<button class="pbtn small ghost" type="button" data-act="quiz" data-id="${u.id}">Abfragen</button>`:""}
    ${karten}
@@ -887,6 +958,7 @@ async function unitAction(act,id,btn){
   const u=units.find(x=>x.id===id); if(!u) return;
   if(act==="type"){collId=id;lsSet("gt-coll",id);caseIdx=0;refreshCases();go("trainer");}
   if(act==="exam"){collId=id;lsSet("gt-coll",id);caseIdx=0;refreshCases();go("examen");}
+  if(act==="read") openRead({id});
   if(act==="quiz") quiz(u);
   if(act==="cards") flashcards(u);
   if(act==="cardgen") generateCards(u,btn);
