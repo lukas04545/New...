@@ -768,9 +768,14 @@ async function runGenerate({material,rg,vname,datum,art,msg,files,extra}){
     Object.assign(u,extra||{});
     u.files=(files||[]).map(f=>({name:cleanName(f.name)})); u.truncated=cut;
     await saveUnit(u);
+    if(hasStoff(u)){
+      msg("DeepSeek erstellt die Lernkarteikarten …","");
+      try{u.karten=await makeCards(u,{signal:ctl.signal,onText:({text})=>msg(`DeepSeek erstellt die Lernkarteikarten … ${text.length.toLocaleString("de-DE")} Zeichen`,"")});await saveUnit(u);}
+      catch(e){u.karten=[];}
+    }
     let filed="";
     try{await archiveUnit(u,files);filed=" Originale und Übersicht liegen auf dem Server unter "+[u.rechtsgebiet,u.teilgebiet].join(" › ")+".";}catch(e){filed=" Die Ablage der Dateien ist fehlgeschlagen.";}
-    msg(`Fertig: ${u.definitionen.length} Definitionen, ${u.streite.length} Streitstände, ${u.schemata.length} Schemata, ${u.faelle.length} Fälle und ${u.fragen.length} Wiederholungsfragen zu „${u.thema}“.${cut?" Das Material war sehr lang; berücksichtigt wurden die ersten 90.000 Zeichen.":""}${filed}`,"ok");
+    msg(`Fertig: ${u.definitionen.length} Definitionen, ${u.streite.length} Streitstände, ${u.schemata.length} Schemata, ${u.faelle.length} Fälle und ${u.fragen.length} Wiederholungsfragen zu „${u.thema}“${u.karten?.length?` sowie ${u.karten.length} Lernkarteikarten`:""}.${cut?" Das Material war sehr lang; berücksichtigt wurden die ersten 90.000 Zeichen.":""}${filed}`,"ok");
     collId=u.id; lsSet("gt-coll",u.id); caseIdx=0; refreshCases();
     return u;
   }catch(e){
@@ -816,12 +821,16 @@ function renderLib(){
 }
 function unitCard(u){
   const cnt=(n,s,p)=>n?`${n} ${n===1?s:p}`:"";
-  const meta=[u.veranstaltung,u.datum&&new Date(u.datum+"T12:00").toLocaleDateString("de-DE"),cnt(u.definitionen?.length,"Definition","Definitionen"),cnt(u.streite?.length,"Streitstand","Streitstände"),cnt(u.schemata?.length,"Schema","Schemata"),cnt(u.faelle?.length,"Fall","Fälle"),cnt(u.fragen?.length,"Frage","Fragen")].filter(Boolean).join(" · ");
+  const meta=[u.veranstaltung,u.datum&&new Date(u.datum+"T12:00").toLocaleDateString("de-DE"),cnt(u.definitionen?.length,"Definition","Definitionen"),cnt(u.streite?.length,"Streitstand","Streitstände"),cnt(u.schemata?.length,"Schema","Schemata"),cnt(u.faelle?.length,"Fall","Fälle"),cnt(u.fragen?.length,"Frage","Fragen"),cnt(u.karten?.length,"Karteikarte","Karteikarten")].filter(Boolean).join(" · ");
+  const karten=u.karten?.length
+    ? `<button class="pbtn small" type="button" data-act="cards" data-id="${u.id}">Lernkarten (${dueCount(u)} fällig)</button><button class="pbtn small ghost" type="button" data-act="cardgen" data-id="${u.id}">Neu erstellen</button>`
+    : hasStoff(u) ? `<button class="pbtn small ghost" type="button" data-act="cardgen" data-id="${u.id}">Karteikarten erstellen</button>` : "";
   const files=(u.files||[]).map(f=>`<a class="pbtn small ghost" style="text-decoration:none" href="/api/files?unit=${encodeURIComponent(u.id)}&name=${encodeURIComponent(f.name)}" download>${esc(f.name.length>28?f.name.slice(0,26)+"…":f.name)}</a>`).join("");
   return `<div class="unit"><b>${esc(u.thema)}</b><span class="meta">${esc(meta)}</span>${u.zusammenfassung?`<p>${esc(u.zusammenfassung)}</p>`:""}
    <div class="row-btn"><button class="pbtn small" type="button" data-act="type" data-id="${u.id}">Tippen</button>
    <button class="pbtn small ghost" type="button" data-act="exam" data-id="${u.id}">Im E-Examen</button>
    ${u.fragen?.length?`<button class="pbtn small ghost" type="button" data-act="quiz" data-id="${u.id}">Abfragen</button>`:""}
+   ${karten}
    <button class="pbtn small ghost" type="button" data-act="export" data-id="${u.id}">Exportieren</button>
    ${files}
    <button class="pbtn small danger" type="button" data-act="del" data-id="${u.id}">Löschen</button></div></div>`;
@@ -831,6 +840,8 @@ async function unitAction(act,id,btn){
   if(act==="type"){collId=id;lsSet("gt-coll",id);caseIdx=0;refreshCases();go("trainer");}
   if(act==="exam"){collId=id;lsSet("gt-coll",id);caseIdx=0;refreshCases();go("examen");}
   if(act==="quiz") quiz(u);
+  if(act==="cards") flashcards(u);
+  if(act==="cardgen") generateCards(u,btn);
   if(act==="del"){
     if(btn.dataset.armed!=="1"){btn.dataset.armed="1";btn.textContent="Wirklich löschen?";setTimeout(()=>{btn.dataset.armed="";btn.textContent="Löschen";},3000);return;}
     try{await deleteUnit(u);toast("Gelöscht.");}catch(e){toast("Löschen fehlgeschlagen.");}
@@ -876,6 +887,93 @@ function quiz(u){
     box.querySelector("button")?.focus();
   };
   m.querySelector("[data-x]").onclick=()=>m.remove();
+  draw();
+}
+
+/* ---------- Lernkarteikarten: KI aus Definitionen, Streiten und Schemata, Wiederholung nach Fächern ---------- */
+const KARTEN_TYPEN=["Definition","Streit","Schema"];
+const FACH_TAGE=[0,1,3,7,14]; // Tage bis zur nächsten Wiederholung für Fach 1 bis 5
+const hasStoff=u=>!!(u.definitionen?.length||u.streite?.length||u.schemata?.length);
+const dueCount=u=>(u.karten||[]).filter(k=>k.faellig<=Date.now()).length;
+function cardsPrompt(u){
+  return `Du erstellst Lernkarteikarten für die Erste Juristische Prüfung in Baden-Württemberg. Grundlage ist ausschließlich der folgende Lernstoff. Erfinde keine Normen, Definitionen oder Ansichten, die dort nicht vorkommen oder die du nicht sicher kennst.
+
+Erstelle 15 bis 40 Karten, jeweils von einem der Typen:
+- "Definition": vorne der Begriff, hinten die Definition in knapper Examensformulierung. Die Norm kommt in das Feld "norm".
+- "Streit": vorne die Streitfrage, hinten die Ansichten mit ihren Vertretern und das Ergebnis der Stellungnahme in 3 bis 6 Sätzen.
+- "Schema": vorne "Prüfungsschema: <Titel>", hinten die Gliederungspunkte, durch Zeilenumbrüche getrennt.
+
+Antworte ausschließlich mit diesem JSON-Objekt:
+{"karten":[{"typ":"Definition","norm":"§ 119 Abs. 1 BGB","vorne":"Erklärungsirrtum","hinten":"..."}]}
+
+Lernstoff:
+${toMarkdown(u).slice(0,60000)}`;
+}
+async function makeCards(u,{signal,onText}={}){
+  const data=await AI.text(cardsPrompt(u),{json:true,signal,onText});
+  const karten=arr(data?.karten).filter(k=>k&&k.vorne&&k.hinten).slice(0,60).map(k=>({
+    id:"k-"+Math.random().toString(36).slice(2,10),
+    typ:KARTEN_TYPEN.includes(k.typ)?k.typ:"Definition",
+    norm:String(k.norm||"").trim(),
+    vorne:String(k.vorne).trim(),
+    hinten:String(k.hinten).trim(),
+    fach:1, faellig:0}));
+  if(!karten.length) throw {code:"empty"};
+  return karten;
+}
+async function generateCards(u,btn){
+  if(!AI.ok()){toast(aiErr({code:"no_key"}));return;}
+  if(busy){toast("Gerade läuft eine andere KI-Aufgabe.");return;}
+  if(u.karten?.length&&!confirm(`Die ${u.karten.length} bestehenden Karten und ihr Lernfortschritt werden ersetzt. Fortfahren?`)) return;
+  busy=true; ctl=new AbortController(); if(btn) btn.disabled=true;
+  toast("DeepSeek erstellt die Karten …");
+  try{u.karten=await makeCards(u,{signal:ctl.signal});await saveUnit(u);toast(`${u.karten.length} Lernkarteikarten erstellt.`);}
+  catch(e){toast(aiErr(e,"Die Karten konnten nicht erstellt werden. Versuch es noch einmal."));}
+  finally{busy=false; ctl=null;}
+}
+function flashcards(u){
+  const queue=u.karten.filter(k=>k.faellig<=Date.now()).sort((a,b)=>a.fach-b.fach);
+  const total=queue.length, doneIds=new Set(); let i=0, shown=false, dirty=false;
+  const m=document.createElement("div"); m.className="modal";
+  m.innerHTML=`<div class="modal-bar"><b>${esc(u.thema)}: Lernkarteikarten</b><button class="pbtn small" type="button" data-x>Schließen</button></div><div class="quiz"></div>`;
+  document.body.appendChild(m);
+  const box=m.querySelector(".quiz");
+  const close=()=>{document.removeEventListener("keydown",onKey); m.remove(); if(dirty) saveUnit(u).catch(()=>toast("Der Lernstand konnte nicht gespeichert werden."));};
+  const rate=gut=>{
+    const k=queue[i];
+    if(gut){k.fach=Math.min(5,k.fach+1); k.faellig=Date.now()+FACH_TAGE[k.fach-1]*864e5; doneIds.add(k.id);}
+    else{k.fach=1; k.faellig=Date.now(); queue.push(k);} // „Nochmal“ kommt am Ende dieser Runde wieder
+    dirty=true; i++; shown=false; draw();
+  };
+  const onKey=e=>{
+    if(e.key==="Escape"){close();return;}
+    if(!total||i>=queue.length) return;
+    if(!shown&&e.key===" "){e.preventDefault(); shown=true; draw();}
+    else if(shown&&e.key==="n") rate(false);
+    else if(shown&&e.key==="g") rate(true);
+  };
+  const draw=()=>{
+    if(!total){
+      const later=u.karten.map(k=>k.faellig).filter(t=>t>Date.now());
+      box.innerHTML=`<p class="qq">Heute ist nichts fällig.</p><p class="msg">${later.length?`Die nächste Karte kommt am ${new Date(Math.min(...later)).toLocaleDateString("de-DE")}.`:""}</p>`;
+      return;
+    }
+    if(i>=queue.length){
+      box.innerHTML=`<p class="qq">Runde geschafft.</p><p class="msg">${doneIds.size} von ${total} Karten gewusst. Die übrigen kommen wieder, wenn sie fällig sind.</p>`;
+      return;
+    }
+    const k=queue[i];
+    box.innerHTML=`<p class="lbl">${esc(k.typ)}${k.norm?` · ${esc(k.norm)}`:""} · Fach ${k.fach} · noch ${queue.length-i}</p>
+      <p class="qq">${esc(k.vorne)}</p>
+      ${shown?`<div class="qa" style="white-space:pre-line">${esc(k.hinten)}</div>`:""}
+      <div class="row-btn">${shown?`<button class="pbtn ghost" type="button" data-r="n">Nochmal (n)</button><button class="pbtn" type="button" data-r="g">Gewusst (g)</button>`:`<button class="pbtn" type="button" data-s>Antwort zeigen (Leertaste)</button>`}</div>`;
+    box.querySelector("[data-s]")?.addEventListener("click",()=>{shown=true; draw();});
+    box.querySelector('[data-r="n"]')?.addEventListener("click",()=>rate(false));
+    box.querySelector('[data-r="g"]')?.addEventListener("click",()=>rate(true));
+    box.querySelector("button")?.focus();
+  };
+  m.querySelector("[data-x]").onclick=close;
+  document.addEventListener("keydown",onKey);
   draw();
 }
 
