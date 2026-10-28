@@ -160,7 +160,7 @@
           <p class="msg">Lade Skript, Folien oder Mitschrift hoch. Die KI macht daraus Gutachten-Übungen, Definitionen und Streitstände zum Abtippen und ordnet alles einem Rechtsgebiet zu.</p>
           <label class="drop" id="drop" for="file">
             <strong>Dateien hierher ziehen oder auswählen</strong>
-            <span>PDF (auch Foliensätze und eingescannte Folien), Word (.docx), Text oder Markdown</span>
+            <span>PDF (auch Foliensätze und eingescannte Folien), Word (.docx), Text oder Markdown. Mehrere zusammengehörende Dateien auf einmal, z. B. Folien und Sachverhalt.</span>
           </label>
           <input type="file" id="file" multiple accept=".pdf,.docx,.txt,.md,application/pdf" hidden>
           <div class="files" id="filelist"></div>
@@ -169,6 +169,7 @@
             <div class="field"><label class="lbl" for="vrg">Rechtsgebiet</label>
               <select id="vrg"><option value="">Automatisch erkennen</option><option>Zivilrecht</option><option>Strafrecht</option><option>Öffentliches Recht</option><option>Grundlagen</option></select></div>
             <div class="field"><label class="lbl" for="vdate">Datum der Vorlesung</label><input type="date" id="vdate"></div>
+            <div class="field"><label class="lbl" for="vtarget">Zu Einheit</label><select id="vtarget"><option value="">Neue Einheit</option></select></div>
           </div>
           <div class="row-btn">
             <button class="pbtn" id="vgen" type="button" disabled>Übungen erzeugen</button>

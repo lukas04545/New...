@@ -629,12 +629,17 @@ let picked=[];
 const drop=$("drop"), fileIn=$("file");
 ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over");}));
 ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over");}));
-drop.addEventListener("drop",e=>addFiles(e.dataTransfer.files));
-fileIn.addEventListener("change",()=>{addFiles(fileIn.files);fileIn.value="";});
+drop.addEventListener("drop",e=>addFiles([...e.dataTransfer.files]));
+// Kopie der Liste: fileIn.files leert sich mit fileIn.value="", während addFiles noch liest
+fileIn.addEventListener("change",()=>{addFiles([...fileIn.files]);fileIn.value="";});
 $("vdate").value=new Date().toISOString().slice(0,10);
+/* Zusammengehörende Dateien: jede bekommt eine Art, damit die KI z. B. einen Sachverhalt als Fall zur Vorlesung löst */
+const ROLES=[["folien","Folien / Skript"],["sv","Sachverhalt"],["loesung","Lösung"],["sonst","Sonstiges"]];
+const ROLE_LABEL=Object.fromEntries(ROLES);
+const guessRole=n=>/(^|[^a-zäöü])(sv|sachverhalt|fall|faelle|fälle|aufgabe|klausur)([^a-zäöü]|$)/i.test(n)?"sv":/l(ö|oe|o)sung|musterl|skizze/i.test(n)?"loesung":"folien";
 async function addFiles(list){
   for(const f of list){
-    const entry={file:f,name:f.name,status:"wird gelesen …",text:""}; picked.push(entry); renderFiles();
+    const entry={file:f,name:f.name,status:"wird gelesen …",text:"",role:guessRole(f.name)}; picked.push(entry); renderFiles();
     try{
       entry.text=await extract(f,entry);
       if(entry.empty?.length&&!inArtifact()){try{await ocrEntry(entry);}catch(e){entry.ocrFail=true;}}
@@ -643,7 +648,8 @@ async function addFiles(list){
     renderFiles();
   }
 }
-const usable=e=>e.text.trim().length>=200||(inArtifact()&&e.empty?.length>0);
+// 200 Zeichen erkennen eingescannte Folien ohne Text; ein Sachverhalt oder eine Lösung darf kurz sein
+const usable=e=>e.text.trim().length>=(e.role==="sv"||e.role==="loesung"?40:200)||(inArtifact()&&e.empty?.length>0);
 function fileStatus(e){
   if(!usable(e)) return "kaum Text gefunden";
   let s=(e.pages?`${e.pages.length} Seiten, `:"")+`${e.text.length.toLocaleString("de-DE")} Zeichen`;
@@ -679,8 +685,10 @@ async function ocrEntry(entry){
   entry.text=pagesText(entry);
 }
 function renderFiles(){
-  $("filelist").innerHTML=picked.map((p,i)=>`<div><span>${esc(p.name)}</span><span>${esc(p.status)} <button class="tbtn" data-rm="${i}" type="button" style="padding:0 6px;margin-left:6px" aria-label="Entfernen">×</button></span></div>`).join("");
+  $("filelist").innerHTML=picked.map((p,i)=>`<div><span class="fname">${esc(p.name)}</span><select class="frole" data-role="${i}" aria-label="Art der Datei ${esc(p.name)}">${ROLES.map(([k,l])=>`<option value="${k}"${p.role===k?" selected":""}>${l}</option>`).join("")}</select><span>${esc(p.status)} <button class="tbtn" data-rm="${i}" type="button" style="padding:0 6px;margin-left:6px" aria-label="Entfernen">×</button></span></div>`).join("");
   $("filelist").querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{picked.splice(+b.dataset.rm,1);renderFiles();});
+  $("filelist").querySelectorAll("[data-role]").forEach(s=>s.onchange=()=>{const e=picked[+s.dataset.role]; e.role=s.value; if(!/wird gelesen|liest Seite|Texterkennung (wird|Folie)/.test(e.status)) e.status=fileStatus(e); renderFiles();});
+  renderTargets();
   const chars=picked.reduce((a,p)=>a+p.text.length,0);
   const bad=picked.filter(p=>p.status==="kaum Text gefunden"||p.status==="nicht lesbar");
   $("vmsg").className="msg"+(bad.length?" err":"");
@@ -738,8 +746,10 @@ $("psave").addEventListener("click",async()=>{
 /* ---------- Übungen erzeugen ---------- */
 let busy=false, ctl=null;
 $("vgen").addEventListener("click",generateFromFiles);
+$("vtarget").addEventListener("change",()=>{$("vgen").textContent=$("vtarget").value?"Zur Einheit hinzufügen":"Übungen erzeugen";});
 $("vstop").addEventListener("click",()=>ctl?.abort());
-function buildPrompt({material,rg,vname,art}){
+function buildPrompt({material,rg,vname,art,roles=[],target}){
+  const hasSV=roles.includes("sv"), hasL=roles.includes("loesung");
   return `Du bist Repetitor für die Erste Juristische Prüfung in Baden-Württemberg. Aus dem Material unten (${art}) arbeitest du alles heraus, was für das Examen zählt, und erstellst Übungsmaterial, das ein Student im Gutachtenstil abtippt, um Zehnfingerschreiben und Gutachtenstil gleichzeitig zu trainieren.
 
 Antworte NUR mit einem JSON-Objekt dieser Form:
@@ -751,25 +761,36 @@ Regeln:
 - definitionen: 8 bis 20. Zuerst alle, die im Material vorkommen, dann weitere examensrelevante zum Thema, jeweils in der gängigen Formulierung der Rechtsprechung oder herrschenden Meinung.
 - streite: alle Meinungsstreite aus dem Material. Behandelt das Material keinen, nimm die 1 bis 3 wichtigsten examensrelevanten Streite zum Thema. Für jeden Streit: die Ansichten mit ihren Vertretern (Rspr., h. M., Literatur) und den wichtigsten Argumenten, eine begründete Stellungnahme und gutachten mit 6 bis 12 segs im Gutachtenstil: O (Fraglich ist, ob ...), S (Nach einer Ansicht ... Dafür spricht ...), S (Nach anderer Ansicht ...), S (Stellungnahme mit Argument), E (Ergebnis). Kommen die Ansichten im Fall zum selben Ergebnis, stelle fest, dass ein Streitentscheid entbehrlich ist.
 - schemata: alle Prüfungsschemata aus dem Material, sonst 1 bis 2 zum Thema. punkte sind Gliederungszeilen mit A., I., 1., a), aa) und Normangabe.
-- faelle: 2 bis 3 Fälle zu den zentralen Problemen, je 8 bis 14 segs. p ist "O" (Obersatz im Konjunktiv), "D" (Definition), "S" (Subsumtion) oder "E" (Ergebnis im Indikativ). Für jedes Tatbestandsmerkmal die Folge O, D, S, E.
+- faelle: ${hasSV?`Die Dateien mit "Art: Sachverhalt" enthalten Fälle zu diesem Stoff. Lege für JEDEN dieser Sachverhalte genau einen Fall an: title ist ein kurzer Name, sachverhalt ist der Sachverhalt aus der Datei (wörtlich, nur offensichtlich Überflüssiges kürzen), frage ist der Bearbeitervermerk aus der Datei, und segs ist ein vollständiges Gutachten mit 10 bis 30 segs, gelöst mit dem Stoff aus den übrigen Dateien.${hasL?' Die Dateien mit "Art: Lösung" sind die Musterlösung dazu: folge ihr in Aufbau, Schwerpunkten und Ergebnis.':""} Erfinde zusätzlich nur dann Fälle, wenn es weniger als 2 Sachverhalte gibt.`:"2 bis 3 Fälle zu den zentralen Problemen, je 8 bis 14 segs."} p ist "O" (Obersatz im Konjunktiv), "D" (Definition), "S" (Subsumtion) oder "E" (Ergebnis im Indikativ). Für jedes Tatbestandsmerkmal die Folge O, D, S, E.
 - fragen: 8 bis 15 Wiederholungsfragen mit knapper Antwort, wie sie in einer mündlichen Prüfung gestellt werden.
 - Verwende nur Normen, Definitionen und Ansichten, die du sicher kennst. Erfinde keine Fundstellen. Bevorzuge, was im Material steht.
 - Das Material kann aus Folien mit Stichpunkten (markiert mit --- Seite/Folie n ---) oder aus einer Mitschrift bestehen. In Mitschriften bedeuten Zeilenanfänge: "§ " Norm, "D: " Definition, "S: " Streitfrage, "A: " Ansicht, "+ " Argument, "P: " Schemapunkt, "! " Merksatz, "? " offene Frage. Rekonstruiere vollständige, korrekte Sätze.
 - Nur Zeichen, die auf einer deutschen Tastatur ohne AltGr tippbar sind: keine Gedankenstriche, keine typografischen Anführungszeichen, kein Eurozeichen (schreibe Euro).
-${vname?`Veranstaltung: ${vname}\n`:""}
+${vname?`Veranstaltung: ${vname}\n`:""}${target?`Das Material ergänzt die bestehende Einheit „${target.thema}“ (${target.rechtsgebiet} › ${target.teilgebiet}). Verwende dieses Rechtsgebiet, Teilgebiet und Thema und wiederhole keine Definitionen oder Streite, die dort schon stehen: ${[...(target.definitionen||[]).map(d=>d.begriff),...(target.streite||[]).map(s=>s.frage)].slice(0,60).join("; ")||"keine"}.\n`:""}
 MATERIAL:
 ${material}`;
 }
-async function runGenerate({material,rg,vname,datum,art,msg,files,extra}){
+async function runGenerate({material,rg,vname,datum,art,msg,files,extra,roles,target}){
   const cut=material.length>90000; material=material.slice(0,90000);
   busy=true; ctl=new AbortController(); updateGenState(); $("vstop").hidden=false; M.setBusy(true);
   msg("DeepSeek liest das Material …","");
   try{
-    const data=await AI.text(buildPrompt({material,rg,vname,art}),{json:true,signal:ctl.signal,onText:({text})=>msg(`DeepSeek arbeitet das Material heraus … ${text.length.toLocaleString("de-DE")} Zeichen`,"")});
-    const u=cleanUnit(data,{rg,vname,datum});
+    const data=await AI.text(buildPrompt({material,rg,vname,art,roles,target}),{json:true,signal:ctl.signal,onText:({text})=>msg(`DeepSeek arbeitet das Material heraus … ${text.length.toLocaleString("de-DE")} Zeichen`,"")});
+    let u=cleanUnit(data,{rg,vname,datum});
     if(!u.faelle.length&&!u.definitionen.length&&!u.streite.length&&!u.schemata.length) throw {code:"empty"};
+    const names=(files||[]).map(f=>({name:cleanName(f.name)}));
+    if(target){
+      const added=mergeUnit(target,u);
+      target.files=[...(target.files||[]).filter(f=>!names.some(n=>n.name===f.name)),...names];
+      await saveUnit(target);
+      let filed="";
+      try{await archiveUnit(target,files);}catch(e){filed=" Die Ablage der Dateien ist fehlgeschlagen.";}
+      msg(`Ergänzt „${target.thema}“: ${added}.${target.karten?.length?" Die Karteikarten kannst du in der Bibliothek neu erstellen, damit der neue Stoff dabei ist.":""}${filed}`,"ok");
+      collId=target.id; lsSet("gt-coll",target.id); caseIdx=0; refreshCases();
+      return target;
+    }
     Object.assign(u,extra||{});
-    u.files=(files||[]).map(f=>({name:cleanName(f.name)})); u.truncated=cut;
+    u.files=names; u.truncated=cut;
     await saveUnit(u);
     if(hasStoff(u)){
       msg("DeepSeek erstellt die Lernkarteikarten …","");
@@ -789,12 +810,31 @@ async function runGenerate({material,rg,vname,datum,art,msg,files,extra}){
 async function generateFromFiles(){
   if(!AI.ok()||busy) return;
   const ready=picked.filter(usable);
-  const material=ready.map(p=>`### Datei: ${p.name}\n${p.text}`).join("\n\n").replace(/[ \t]+/g," ").replace(/\n{3,}/g,"\n\n");
+  // Sachverhalte und Lösungen zuerst, damit sie beim Kürzen langer Folien nicht wegfallen
+  const order={sv:0,loesung:1,folien:2,sonst:3};
+  const sorted=[...ready].sort((a,b)=>order[a.role]-order[b.role]);
+  const material=sorted.map(p=>`### Datei: ${p.name} (Art: ${ROLE_LABEL[p.role]||"Folien / Skript"})\n${p.text}`).join("\n\n").replace(/[ \t]+/g," ").replace(/\n{3,}/g,"\n\n");
+  const target=units.find(x=>x.id===$("vtarget").value);
   const msg=(t,c)=>{$("vmsg").className="msg"+(c?" "+c:"");$("vmsg").textContent=t;};
-  const u=await runGenerate({material,rg:$("vrg").value,vname:$("vname").value.trim(),datum:$("vdate").value,art:"Vorlesungsunterlagen",msg,files:ready.map(p=>p.file)});
+  const u=await runGenerate({material,rg:target?target.rechtsgebiet:$("vrg").value,vname:$("vname").value.trim(),datum:$("vdate").value,art:"Vorlesungsunterlagen",msg,files:sorted.map(p=>p.file),roles:sorted.map(p=>p.role),target});
   if(u){const t=$("vmsg").textContent;picked=[];renderFiles();msg(t,"ok");}
 }
 const arr=x=>Array.isArray(x)?x:[];
+// Neue Ergebnisse an eine bestehende Einheit anhängen, ohne Dubletten; liefert eine kurze Zusammenfassung
+function mergeUnit(t,n){
+  const k=s=>String(s||"").toLowerCase().replace(/\s+/g," ").trim();
+  const add=(field,key)=>{const have=new Set((t[field]||[]).map(x=>k(key(x)))); const neu=(n[field]||[]).filter(x=>!have.has(k(key(x)))); t[field]=[...(t[field]||[]),...neu]; return neu.length;};
+  const c={f:add("faelle",x=>x.sachverhalt||x.title),d:add("definitionen",x=>x.begriff),s:add("streite",x=>x.frage),p:add("schemata",x=>x.titel),q:add("fragen",x=>x.frage)};
+  if(!t.zusammenfassung) t.zusammenfassung=n.zusammenfassung;
+  const part=(n,s,p)=>`${n} ${n===1?s:p}`;
+  return [part(c.f,"Fall","Fälle"),part(c.d,"Definition","Definitionen"),part(c.s,"Streitstand","Streitstände"),part(c.p,"Schema","Schemata"),part(c.q,"Frage","Fragen")].join(", ")+" neu";
+}
+function renderTargets(){
+  const sel=$("vtarget"); if(!sel) return;
+  const cur=sel.value;
+  sel.innerHTML=`<option value="">Neue Einheit</option>`+[...units].sort((a,b)=>(b.datum||"").localeCompare(a.datum||"")).map(u=>`<option value="${esc(u.id)}">${esc(`${u.thema} (${u.teilgebiet||"Allgemein"}${u.datum?", "+new Date(u.datum+"T12:00").toLocaleDateString("de-DE"):""})`)}</option>`).join("");
+  sel.value=units.some(u=>u.id===cur)?cur:"";
+}
 function cleanUnit(d,{rg,vname,datum}){
   d=d||{};
   let r=RG_ORDER.includes(d.rechtsgebiet)?d.rechtsgebiet:(rg||"Grundlagen");
@@ -887,7 +927,7 @@ $("sideClose").onclick=toggleSide;
 $("sideBack").onclick=closeSideMobile;
 $("sideSearch").onclick=()=>{closeSideMobile(); go("bibliothek"); $("bq").focus();};
 
-function renderLib(){ renderTree(); renderBib(); if(view==="lesen") renderRead(); }
+function renderLib(){ renderTree(); renderBib(); renderTargets(); if(view==="lesen") renderRead(); }
 
 /* ---------- Bibliothek: alle Definitionen, Streite, Schemata, Mitschriften und Einheiten an einem Ort ---------- */
 let bKind="alle";
