@@ -26,6 +26,8 @@ cd "$APP" || { echo "Ordner $APP fehlt."; status error; exit 1; }
 GIT=(git -c "safe.directory=$APP")
 
 OLD=$("${GIT[@]}" rev-parse HEAD)
+# Eine von npm lokal umgeschriebene Lock-Datei würde git pull blockieren
+"${GIT[@]}" checkout -- package-lock.json 2>/dev/null || true
 echo "== Code holen"
 if ! "${GIT[@]}" pull --ff-only; then
   echo "Aktualisierung fehlgeschlagen: git pull war nicht möglich (siehe oben)."
@@ -34,9 +36,9 @@ fi
 NEW=$("${GIT[@]}" rev-parse HEAD)
 
 if [ "$OLD" != "$NEW" ]; then
-  if ! "${GIT[@]}" diff --quiet "$OLD" "$NEW" -- package.json; then
+  if ! "${GIT[@]}" diff --quiet "$OLD" "$NEW" -- package.json package-lock.json; then
     echo "== Abhängigkeiten installieren"
-    npm install --omit=dev || { echo "npm install ist fehlgeschlagen."; status error; exit 1; }
+    npm ci --omit=dev || npm install --omit=dev --no-package-lock || { echo "npm install ist fehlgeschlagen."; status error; exit 1; }
   fi
 else
   echo "Schon auf dem neuesten Stand. Der Dienst wird trotzdem neu gestartet."

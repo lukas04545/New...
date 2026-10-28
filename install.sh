@@ -41,7 +41,8 @@ fi
 
 echo "==> Benutzer und Abhängigkeiten"
 id tipptrainer >/dev/null 2>&1 || useradd --system --home "$APP" --shell /usr/sbin/nologin tipptrainer
-npm install --omit=dev
+# npm ci verändert package-lock.json nicht, damit git pull später nicht daran scheitert
+npm ci --omit=dev || npm install --omit=dev --no-package-lock
 
 [ -f .env ] || cp .env.example .env
 if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
