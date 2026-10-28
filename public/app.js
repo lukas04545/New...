@@ -258,7 +258,7 @@ $("restart").addEventListener("click",load);
 /* ---------- Navigation ---------- */
 let view="trainer";
 function go(v){
-  if(!["trainer","examen","mitschrift","vorlesungen"].includes(v)) v="trainer";
+  if(!["trainer","examen","mitschrift","vorlesungen","bibliothek"].includes(v)) v="trainer";
   view=v;
   document.querySelectorAll(".view").forEach(s=>s.style.display=s.id==="v-"+v?"grid":"none");
   document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected",t.dataset.view===v));
@@ -267,6 +267,7 @@ function go(v){
   if(v==="trainer") focusTrap();
   if(v==="examen"&&!X.running) renderExamIdle();
   if(v==="mitschrift") M.onShow();
+  if(v==="bibliothek") renderBib();
 }
 document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>go(t.dataset.view)));
 document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>go(b.dataset.go)));
@@ -815,11 +816,50 @@ function renderTree(){
   t.innerHTML=RG_ORDER.filter(r=>by[r]).map(r=>`<details open><summary>${esc(r)}</summary>${Object.keys(by[r]).sort((a,b)=>a.localeCompare(b,"de")).map(tg=>`<details open class="tg"><summary>${esc(tg)}</summary>${by[r][tg].map(u=>`<button class="unit-link" type="button" data-id="${esc(u.id)}">${esc(u.thema)}</button>`).join("")}</details>`).join("")}</details>`).join("")||`<p class="side-empty">Noch keine Einheiten.</p>`;
   t.querySelectorAll(".unit-link").forEach(b=>b.addEventListener("click",()=>unitAction("type",b.dataset.id,b)));
 }
-function renderLib(){
-  renderTree();
+function renderLib(){ renderTree(); renderBib(); }
+
+/* ---------- Bibliothek: alle Definitionen, Streite, Schemata, Mitschriften und Einheiten an einem Ort ---------- */
+let bKind="alle";
+const BKINDS=[["alle","Alles"],["def","Definitionen"],["streit","Streitstände"],["schema","Schemata"],["notes","Mitschriften"],["units","Einheiten"]];
+function renderBib(){
+  const box=$("bib"); if(!box) return;
+  const q=$("bq").value.trim().toLowerCase(), rg=$("brg").value;
+  const hit=(...xs)=>!q||xs.some(x=>String(x||"").toLowerCase().includes(q));
+  const rgOf=x=>RG_ORDER.includes(x)?x:"Grundlagen";
+  const us=units.filter(u=>!rg||rgOf(u.rechtsgebiet)===rg);
+  const defs=[], streite=[], schemata=[];
+  us.forEach(u=>{
+    (u.definitionen||[]).forEach(d=>{if(hit(d.begriff,d.norm,d.definition,u.thema)) defs.push({u,d});});
+    (u.streite||[]).forEach(s=>{if(hit(s.frage,s.norm,s.stellungnahme,u.thema,...(s.ansichten||[]).flatMap(a=>[a.name,a.inhalt,a.argumente]))) streite.push({u,s});});
+    (u.schemata||[]).forEach(s=>{if(hit(s.titel,s.norm,u.thema,...(s.punkte||[]))) schemata.push({u,s});});
+  });
+  const notes=(M.notes||[]).filter(n=>(!rg||rgOf(n.rechtsgebiet)===rg)&&hit(n.thema,n.veranstaltung,n.cues,n.notes,n.summary));
+  const unitHits=us.filter(u=>hit(u.thema,u.teilgebiet,u.veranstaltung,u.zusammenfassung));
+  const counts={def:defs.length,streit:streite.length,schema:schemata.length,notes:notes.length,units:unitHits.length};
+  counts.alle=Object.values(counts).reduce((a,b)=>a+b,0);
+  $("bkinds").innerHTML=BKINDS.map(([k,l])=>`<button class="bkind" type="button" data-k="${k}" aria-pressed="${k===bKind}">${l} (${counts[k]})</button>`).join("");
+  $("bkinds").querySelectorAll(".bkind").forEach(b=>b.onclick=()=>{bKind=b.dataset.k; renderBib();});
+  const normTag=n=>n?`<span class="bnorm">${esc(n)}</span>`:"";
+  const srcTag=u=>`<span class="bsrc">${esc(`${rgOf(u.rechtsgebiet)} › ${u.teilgebiet||"Allgemein"} › ${u.thema}`)}</span>`;
+  // Unter „Alles“ fallen leere Abschnitte weg, bei einer gewählten Art steht „Nichts gefunden“
+  const sec=(k,title,items,fn)=>bKind!==k&&!(bKind==="alle"&&items.length)?"":`<section class="bsec"><h2>${title} <small>${items.length}</small></h2>${items.length?items.map(fn).join(""):`<p class="empty">Nichts gefunden.</p>`}</section>`;
+  box.innerHTML=
+    sec("def","Definitionen",defs,({u,d})=>`<div class="bitem"><div class="bhead"><b>${esc(d.begriff)}</b>${normTag(d.norm)}</div><p>${esc(d.definition)}</p>${srcTag(u)}</div>`)+
+    sec("streit","Streitstände",streite,({u,s})=>`<details class="bitem"><summary><b>${esc(s.frage)}</b>${normTag(s.norm)}</summary>${(s.ansichten||[]).map(a=>`<p><b>${esc(a.name)}:</b> ${esc(a.inhalt)}${a.argumente?` <span class="bsrc">Argumente: ${esc(a.argumente)}</span>`:""}</p>`).join("")}${s.stellungnahme?`<p><b>Stellungnahme:</b> ${esc(s.stellungnahme)}</p>`:""}${srcTag(u)}</details>`)+
+    sec("schema","Schemata",schemata,({u,s})=>`<details class="bitem"><summary><b>${esc(s.titel)}</b>${normTag(s.norm)}</summary><p class="bpts">${esc((s.punkte||[]).join("\n"))}</p>${srcTag(u)}</details>`)+
+    sec("notes","Mitschriften",notes,n=>{const t=String(n.summary||n.notes||""); return `<div class="bitem"><div class="bhead"><b>${esc(n.thema||"Ohne Thema")}</b><span class="bsrc">${esc([n.rechtsgebiet,n.veranstaltung,n.datum&&new Date(n.datum+"T12:00").toLocaleDateString("de-DE")].filter(Boolean).join(" · "))}</span></div>${t?`<p>${esc(t.slice(0,240))}${t.length>240?" …":""}</p>`:""}<div class="row-btn"><button class="pbtn small ghost" type="button" data-note="${esc(n.id)}">Öffnen</button></div></div>`;});
+  if(bKind==="alle"&&!counts.alle) box.innerHTML=`<p class="empty">${units.length||M.notes?.length?"Nichts gefunden.":"Noch leer. Lade unter „Vorlesungen“ Material hoch oder schreib eine Mitschrift."}</p>`;
+  box.querySelectorAll("[data-note]").forEach(b=>b.onclick=()=>{go("mitschrift"); M.open(b.dataset.note);});
+  $("bUnits").hidden=!(bKind==="units"||(bKind==="alle"&&unitHits.length));
+  renderUnits(unitHits);
+}
+$("bq").addEventListener("input",renderBib);
+$("brg").addEventListener("change",renderBib);
+
+function renderUnits(list){
   const lib=$("lib");
-  if(!units.length){lib.innerHTML=`<div class="empty">Noch keine Einheiten. Lade links ein Skript oder Folien hoch oder mach aus einer Mitschrift Übungen. Alles erscheint dann hier, sortiert nach Rechtsgebiet, und in der Sammlungsauswahl des Tipptrainers.</div>`;return;}
-  const by={}; units.forEach(u=>{const r=RG_ORDER.includes(u.rechtsgebiet)?u.rechtsgebiet:"Grundlagen";(by[r]=by[r]||{});(by[r][u.teilgebiet||"Allgemein"]=by[r][u.teilgebiet||"Allgemein"]||[]).push(u);});
+  if(!list.length){lib.innerHTML=`<div class="empty">${units.length?"Keine Einheit passt zur Suche.":"Noch keine Einheiten. Lade unter „Vorlesungen“ ein Skript oder Folien hoch oder mach aus einer Mitschrift Übungen."}</div>`;return;}
+  const by={}; list.forEach(u=>{const r=RG_ORDER.includes(u.rechtsgebiet)?u.rechtsgebiet:"Grundlagen";(by[r]=by[r]||{});(by[r][u.teilgebiet||"Allgemein"]=by[r][u.teilgebiet||"Allgemein"]||[]).push(u);});
   lib.innerHTML=RG_ORDER.filter(r=>by[r]).map(r=>{
     const tgs=Object.keys(by[r]).sort((a,b)=>a.localeCompare(b,"de"));
     const n=tgs.reduce((a,t)=>a+by[r][t].length,0);

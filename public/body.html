@@ -1,6 +1,6 @@
 <div class="shell">
 <aside class="side" aria-label="Bibliothek">
-  <div class="side-head">Bibliothek</div>
+  <div class="side-head">Rechtsgebiete</div>
   <div id="tree"></div>
 </aside>
 <div class="content">
@@ -12,6 +12,7 @@
       <button class="tab" role="tab" data-view="examen" type="button">E-Examen</button>
       <button class="tab" role="tab" data-view="mitschrift" type="button">Mitschrift</button>
       <button class="tab" role="tab" data-view="vorlesungen" type="button">Vorlesungen</button>
+      <button class="tab" role="tab" data-view="bibliothek" type="button">Bibliothek</button>
     </nav>
   </div>
 </div>
@@ -183,6 +184,8 @@
           <div class="field"><label class="lbl" for="ptext">Gutachtentext</label><textarea id="ptext" placeholder="T könnte sich wegen Mordes gemäß § 211 StGB strafbar gemacht haben, …"></textarea></div>
           <div class="row-btn"><button class="pbtn ghost" id="psave" type="button">Zerlegen und speichern</button><span class="msg" id="pmsg"></span></div>
         </div>
+      </div>
+      <div style="display:grid;gap:18px">
         <div class="card" id="settings">
           <h2>Server</h2>
           <div class="field"><p class="lbl">KI für Übungen und Korrektur</p><p class="msg" id="aiState">Wird geladen …</p>
@@ -201,11 +204,19 @@
           <div class="row-btn"><button class="pbtn ghost small" id="logout" type="button">Abmelden</button></div>
         </div>
       </div>
-      <div class="card">
-        <div class="row-btn" style="justify-content:space-between"><h2>Deine Bibliothek</h2></div>
-        <div class="lib" id="lib"></div>
-      </div>
     </div>
+  </section>
+
+  <!-- BIBLIOTHEK -->
+  <section id="v-bibliothek" class="view" style="display:none;gap:16px">
+    <div class="toolbar">
+      <div class="field" style="flex:1 1 260px"><label class="lbl" for="bq">Suchen</label><input type="text" id="bq" placeholder="Begriff, Norm oder Stichwort, z. B. Vorsatz oder § 16" autocomplete="off" style="width:100%"></div>
+      <div class="field"><label class="lbl" for="brg">Rechtsgebiet</label>
+        <select id="brg"><option value="">Alle</option><option>Zivilrecht</option><option>Strafrecht</option><option>Öffentliches Recht</option><option>Grundlagen</option></select></div>
+    </div>
+    <div class="bkinds" id="bkinds" aria-label="Art"></div>
+    <div class="bib" id="bib"></div>
+    <section class="bsec" id="bUnits"><h2>Einheiten</h2><div class="lib" id="lib"></div></section>
   </section>
 
   <footer>Der Examenseditor bildet die Funktionen des Prüfungseditors nach, wie sie die Anwendungshinweise zum E-Examen beschreiben. Prüfe Details zusätzlich in der offiziellen Demo.</footer>
