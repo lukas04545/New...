@@ -22,6 +22,10 @@ if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split("."
   curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
   apt-get install -y -qq nodejs
 fi
+if ! command -v npm >/dev/null; then
+  echo "==> npm"
+  apt-get install -y -qq npm
+fi
 
 if ! command -v cloudflared >/dev/null; then
   echo "==> cloudflared"
