@@ -13,6 +13,9 @@ set -euo pipefail
 APP=/opt/gutachten-trainer
 cd "$APP"
 
+# Der Ordner gehört dem Dienstbenutzer tipptrainer; damit root trotzdem git pull ausführen darf:
+git config --global --get-all safe.directory 2>/dev/null | grep -qx "$APP" || git config --global --add safe.directory "$APP"
+
 echo "==> Pakete"
 apt-get update -qq
 apt-get install -y -qq curl unzip ca-certificates gnupg
