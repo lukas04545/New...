@@ -501,7 +501,7 @@ function endExam(timeUp){
   r.innerHTML=h; r.hidden=false; r.scrollIntoView({behavior:"smooth",block:"start"});
   X.lastText=text;
   $("xcopy").onclick=()=>{navigator.clipboard?.writeText(text).then(()=>toast("Text kopiert."),()=>toast("Kopieren nicht möglich. Markiere den Text im Editor."));};
-  const fb=$("fbBtn"); if(fb){ if(!AI.ok()){fb.disabled=true;$("fbMsg").textContent="Auf dem Server ist keine KI eingerichtet (DEEPSEEK_API_KEY in der Datei .env).";} fb.onclick=()=>feedback(X.c,text); }
+  const fb=$("fbBtn"); if(fb){ if(!AI.ok()){fb.disabled=true;$("fbMsg").textContent="Auf dem Server ist noch keine KI eingerichtet. Trag den DeepSeek-Schlüssel unter Einstellungen › Server ein.";} fb.onclick=()=>feedback(X.c,text); }
 }
 async function feedback(c,text){
   if(!AI.ok()) return;
@@ -612,10 +612,10 @@ const AI={
 };
 function aiErr(e,fallback){
   return ({cancelled:"Abgebrochen.",rate_limited:"Zu viele Anfragen gerade. Versuch es in ein paar Minuten noch einmal.",
-    auth:"DeepSeek lehnt den API-Schlüssel auf dem Server ab. Prüfe DEEPSEEK_API_KEY in der Datei .env.",
+    auth:"DeepSeek lehnt den API-Schlüssel auf dem Server ab. Prüfe den Schlüssel unter Einstellungen › Server.",
     balance:"Das DeepSeek-Guthaben ist aufgebraucht. Lade es auf platform.deepseek.com auf.",
     bad_model:"DeepSeek hat die Anfrage abgelehnt. Prüfe DEEPSEEK_MODEL in der Datei .env.",
-    no_key:"Auf dem Server ist kein DeepSeek-Schlüssel eingetragen (DEEPSEEK_API_KEY in der Datei .env).",
+    no_key:"Es ist noch kein DeepSeek-Schlüssel eingetragen. Trag ihn unter Einstellungen › Server ein.",
     too_large:"Das Material ist zu groß für eine Anfrage. Lade weniger auf einmal hoch.",
     network:"Der Server oder DeepSeek ist gerade nicht erreichbar. Versuch es gleich noch einmal."})[e?.code]||fallback;
 }
@@ -687,7 +687,7 @@ function renderFiles(){
 function updateGenState(){
   const ok=picked.some(usable);
   $("vgen").disabled=!ok||!AI.ok()||busy;
-  if(ok&&!AI.ok()&&!busy){$("vmsg").className="msg err";$("vmsg").textContent="Auf dem Server ist keine KI eingerichtet (DEEPSEEK_API_KEY in der Datei .env). Eigenen Text zerlegen geht auch ohne.";}
+  if(ok&&!AI.ok()&&!busy){$("vmsg").className="msg err";$("vmsg").textContent="Auf dem Server ist noch keine KI eingerichtet. Trag den DeepSeek-Schlüssel unter Einstellungen › Server ein. Eigenen Text zerlegen geht auch ohne.";}
 }
 async function extract(f,entry={}){
   const n=f.name.toLowerCase();
