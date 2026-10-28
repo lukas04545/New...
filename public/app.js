@@ -600,14 +600,15 @@ const AI={
     let res;
     try{res=await api("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt,json:!!json}),signal});}
     catch(e){if(e?.code==="login") throw e; throw {code:e?.name==="AbortError"?"cancelled":"network"};}
-    if(!res.ok){let b={};try{b=await res.json();}catch(e){} throw {code:b.code||"http",status:b.status||res.status};}
+    // Ohne Code in der Antwort kam der Fehler nicht vom Tipptrainer, sondern vom Tunnel davor
+    if(!res.ok){let b={};try{b=await res.json();}catch(e){} throw {code:b.code||"gateway",status:b.status||res.status};}
     const rd=res.body.getReader(), dec=new TextDecoder(); let buf="", out="", finish="";
     try{
       for(;;){
         const {done,value}=await rd.read(); if(done) break;
         buf+=dec.decode(value,{stream:true}); const lines=buf.split("\n"); buf=lines.pop();
         for(const l of lines){const s=l.trim(); if(!s.startsWith("data:")) continue; const d=s.slice(5).trim(); if(d==="[DONE]") continue;
-          try{const j=JSON.parse(d); if(j.error) throw {code:j.error}; const delta=j.choices?.[0]?.delta?.content; if(delta){out+=delta; onText&&onText({text:out,delta});} if(j.choices?.[0]?.finish_reason) finish=j.choices[0].finish_reason;}catch(e){if(e?.code) throw e;}}
+          try{const j=JSON.parse(d); if(j.error) throw {code:j.error,status:j.status}; const delta=j.choices?.[0]?.delta?.content; if(delta){out+=delta; onText&&onText({text:out,delta});} if(j.choices?.[0]?.finish_reason) finish=j.choices[0].finish_reason;}catch(e){if(e?.code) throw e;}}
       }
     }catch(e){if(e?.code&&e.code!=="network") throw e; throw {code:e?.name==="AbortError"?"cancelled":"network",text:out};}
     // Bei finish_reason "length" ist das JSON abgeschnitten und nicht lesbar
@@ -619,7 +620,7 @@ const AI={
 async function aiRetry(prompt,opts){
   try{return await AI.text(prompt,opts);}
   catch(e){
-    if(!["http","network","rate_limited"].includes(e?.code)||opts?.signal?.aborted) throw e;
+    if(!["http","network","rate_limited","gateway"].includes(e?.code)||opts?.signal?.aborted) throw e;
     await new Promise(r=>setTimeout(r,4000));
     return AI.text(prompt,opts);
   }
@@ -632,7 +633,8 @@ function aiErr(e,fallback){
     no_key:"Es ist noch kein DeepSeek-Schlüssel eingetragen. Trag ihn unter Einstellungen › Server ein.",
     too_large:"Das Material ist zu groß für eine Anfrage. Lade weniger auf einmal hoch.",
     network:"Der Server oder DeepSeek ist gerade nicht erreichbar. Versuch es gleich noch einmal.",
-    truncated:"Die Antwort der KI war zu lang und wurde abgeschnitten. Lade weniger Material auf einmal hoch, z. B. eine Vorlesung pro Durchgang."})[e?.code]||fallback;
+    truncated:"Die Antwort der KI war zu lang und wurde abgeschnitten. Lade weniger Material auf einmal hoch, z. B. eine Vorlesung pro Durchgang.",
+    gateway:`Die Verbindung über den Cloudflare-Tunnel ist abgebrochen${e?.status?" ("+e.status+")":""}. Prüfe auf dem Server: systemctl status gutachten-trainer gutachten-tunnel`})[e?.code]||fallback;
 }
 // Für Meldungen ohne festen Text: Code und DeepSeek-Status nennen, damit sich der Fehler eingrenzen lässt
 function errDetail(e){return e?.code?`${e.code}${e.status?" "+e.status:""}`:(e?.message||String(e||"unbekannt"));
@@ -652,11 +654,14 @@ $("vdate").value=new Date().toISOString().slice(0,10);
 const ROLES=[["folien","Folien / Skript"],["sv","Sachverhalt"],["loesung","Lösung"],["sonst","Sonstiges"]];
 const ROLE_LABEL=Object.fromEntries(ROLES);
 const guessRole=n=>/(^|[^a-zäöü])(sv|sachverhalt|fall|faelle|fälle|aufgabe|klausur)([^a-zäöü]|$)/i.test(n)?"sv":/l(ö|oe|o)sung|musterl|skizze/i.test(n)?"loesung":"folien";
+// „Fall 1_Examinatorium …“ ist meist ein Foliensatz: ohne SV/Sachverhalt im Namen gilt nur ein kurzer Text als Sachverhalt
+const strongSV=n=>/(^|[^a-zäöü])(sv|sachverhalt)([^a-zäöü]|$)/i.test(n);
 async function addFiles(list){
   for(const f of list){
     const entry={file:f,name:f.name,status:"wird gelesen …",text:"",role:guessRole(f.name)}; picked.push(entry); renderFiles();
     try{
       entry.text=await extract(f,entry);
+      if(entry.role==="sv"&&!strongSV(f.name)&&entry.text.length>15000) entry.role="folien";
       if(entry.empty?.length&&!inArtifact()){try{await ocrEntry(entry);}catch(e){entry.ocrFail=true;}}
       entry.status=fileStatus(entry);
     }catch(e){entry.status="nicht lesbar"; entry.text="";}

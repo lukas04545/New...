@@ -198,20 +198,28 @@ async function handleAI(req, res) {
     ],
   };
   if (json) body.response_format = { type: "json_object" };
-  let up;
-  try {
-    up = await fetch(DS_URL, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key }, body: JSON.stringify(body), signal: ctl.signal });
-  } catch (e) { return send(res, 502, { code: "network" }); }
-  if (!up.ok) {
-    const t = await up.text().catch(() => "");
-    const code = up.status === 401 ? "auth" : up.status === 402 ? "balance" : up.status === 429 ? "rate_limited" : /context|too long|maximum/i.test(t) ? "too_large" : up.status === 400 ? "bad_model" : "http";
-    console.error(`[ki] DeepSeek ${up.status}: ${t.slice(0, 300)}`);
-    return send(res, 502, { code, status: up.status });
-  }
+  // Sofort antworten und alle 15 s ein Lebenszeichen senden: der Cloudflare-Tunnel bricht
+  // sonst ab, wenn DeepSeek bei viel Material lange bis zur ersten Antwort braucht.
+  // Fehler kommen deshalb als Nachricht im Datenstrom, nicht als HTTP-Status.
   res.writeHead(200, { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" });
-  try { for await (const chunk of up.body) res.write(chunk); }
-  catch (e) { if (!ctl.signal.aborted) res.write(`data: ${JSON.stringify({ error: "network" })}\n\n`); }
-  res.end();
+  res.write(": start\n\n");
+  const ping = setInterval(() => res.write(": ping\n\n"), 15000);
+  const fail = (error, status) => { if (!res.writableEnded) { res.write(`data: ${JSON.stringify({ error, status })}\n\n`); res.end(); } };
+  try {
+    let up;
+    try {
+      up = await fetch(DS_URL, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key }, body: JSON.stringify(body), signal: ctl.signal });
+    } catch (e) { console.error(`[ki] DeepSeek nicht erreichbar: ${e.message}`); return fail("network"); }
+    if (!up.ok) {
+      const t = await up.text().catch(() => "");
+      const code = up.status === 401 ? "auth" : up.status === 402 ? "balance" : up.status === 429 ? "rate_limited" : /context|too long|maximum/i.test(t) ? "too_large" : up.status === 400 ? "bad_model" : "http";
+      console.error(`[ki] DeepSeek ${up.status}: ${t.slice(0, 300)}`);
+      return fail(code, up.status);
+    }
+    try { for await (const chunk of up.body) res.write(chunk); }
+    catch (e) { if (!ctl.signal.aborted) { console.error(`[ki] Datenstrom abgebrochen: ${e.message}`); return fail("network"); } }
+    res.end();
+  } finally { clearInterval(ping); }
 }
 
 /* ---------- Anfragen ---------- */
