@@ -77,6 +77,12 @@ else
   echo "Deine Adresse: ${URL:-noch nicht bereit. Gleich prüfen: journalctl -u gutachten-tunnel | grep trycloudflare}"
 fi
 
+echo "==> Update-Dienst"
+chmod +x update.sh
+cp gutachten-update.service gutachten-update.path /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now gutachten-update.path
+
 echo
 echo "Fertig. Prüfe: systemctl status gutachten-trainer"
 echo "Den DeepSeek-Schlüssel trägst du im Browser unter Einstellungen › Server ein, falls du ihn nicht oben angegeben hast."

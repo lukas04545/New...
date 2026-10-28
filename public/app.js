@@ -808,7 +808,15 @@ function cleanUnit(d,{rg,vname,datum}){
 }
 
 /* ---------- Bibliothek ---------- */
+/* Seitenleiste: Rechtsgebiete › Teilgebiete › Einheiten, Klick öffnet die Einheit im Tipptrainer */
+function renderTree(){
+  const t=$("tree"); if(!t) return;
+  const by={}; units.forEach(u=>{const r=RG_ORDER.includes(u.rechtsgebiet)?u.rechtsgebiet:"Grundlagen"; (by[r]=by[r]||{}); const tg=u.teilgebiet||"Allgemein"; (by[r][tg]=by[r][tg]||[]).push(u);});
+  t.innerHTML=RG_ORDER.filter(r=>by[r]).map(r=>`<details open><summary>${esc(r)}</summary>${Object.keys(by[r]).sort((a,b)=>a.localeCompare(b,"de")).map(tg=>`<details open class="tg"><summary>${esc(tg)}</summary>${by[r][tg].map(u=>`<button class="unit-link" type="button" data-id="${esc(u.id)}">${esc(u.thema)}</button>`).join("")}</details>`).join("")}</details>`).join("")||`<p class="side-empty">Noch keine Einheiten.</p>`;
+  t.querySelectorAll(".unit-link").forEach(b=>b.addEventListener("click",()=>unitAction("type",b.dataset.id,b)));
+}
 function renderLib(){
+  renderTree();
   const lib=$("lib");
   if(!units.length){lib.innerHTML=`<div class="empty">Noch keine Einheiten. Lade links ein Skript oder Folien hoch oder mach aus einer Mitschrift Übungen. Alles erscheint dann hier, sortiert nach Rechtsgebiet, und in der Sammlungsauswahl des Tipptrainers.</div>`;return;}
   const by={}; units.forEach(u=>{const r=RG_ORDER.includes(u.rechtsgebiet)?u.rechtsgebiet:"Grundlagen";(by[r]=by[r]||{});(by[r][u.teilgebiet||"Allgemein"]=by[r][u.teilgebiet||"Allgemein"]||[]).push(u);});
@@ -1175,6 +1183,30 @@ ${this.material(n).slice(0,60000)}`,{json:true,onText:({text})=>this.msg(`DeepSe
 /* ---------- Einstellungen und Start ---------- */
 $("logout").addEventListener("click",async()=>{M.flush();try{await fetch("/api/logout",{method:"POST"});}catch(e){} location.href="/login";});
 
+/* ---------- Aktualisieren über die Einstellungen ---------- */
+const setUpd=(t,c)=>{$("updMsg").className="msg"+(c?" "+c:"");$("updMsg").textContent=t;};
+$("updBtn").addEventListener("click",async()=>{
+  $("updBtn").disabled=true; setUpd("Aktualisierung wird angestoßen …","");
+  try{const r=await apiJSON("/api/update",{method:"POST"}); pollUpdate(r.since);}
+  catch(err){$("updBtn").disabled=false; setUpd(err.code==="busy"?"Es läuft schon eine Aktualisierung.":"Die Aktualisierung konnte nicht gestartet werden.","err");}
+});
+async function pollUpdate(since){
+  const started=Date.now();
+  const tick=async()=>{
+    if(Date.now()-started>300000){$("updBtn").disabled=false; setUpd("Das dauert ungewöhnlich lang. Auf dem Server: journalctl -u gutachten-update","err"); return;}
+    let st=null; try{st=await apiJSON("/api/update/status");}catch(e){st=null;} // während des Neustarts nicht erreichbar
+    if(st&&st.at===since&&st.state!=="running"){
+      $("updBtn").disabled=false;
+      if(st.state==="ok"){setUpd("Aktualisiert. Die Seite lädt neu …","ok"); setTimeout(()=>location.reload(),1200);}
+      else{setUpd("Aktualisierung fehlgeschlagen:\n"+(st.log||"").split("\n").slice(-8).join("\n"),"err");}
+      return;
+    }
+    setUpd(st?.state==="running"?"Code wird geholt, der Tipptrainer startet neu …":"Warte auf den Start der Aktualisierung …","");
+    setTimeout(tick,2000);
+  };
+  tick();
+}
+
 /* ---------- DeepSeek-Schlüssel in den Einstellungen ---------- */
 function renderAiState(me){
   SERVER.ai=!!me.ai; SERVER.model=me.model||"";
@@ -1182,6 +1214,7 @@ function renderAiState(me){
     ? `DeepSeek über den Server, Modell ${me.model}. Schlüssel endet auf …${me.aiHint}${me.aiSource==="env"?" (aus der .env-Datei)":""}. Er bleibt auf dem Server.`
     : "Keine KI eingerichtet. Trag unten deinen DeepSeek-API-Schlüssel ein.";
   $("aiDel").hidden=me.aiSource!=="settings";
+  $("verState").textContent=`Version ${me.version||"unbekannt"}. Holt den neuesten Stand aus dem Git-Repo und startet den Tipptrainer neu. Der Tunnel läuft weiter.`;
 }
 $("aiForm").addEventListener("submit",async e=>{
   e.preventDefault();

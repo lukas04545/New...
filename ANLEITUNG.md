@@ -74,14 +74,11 @@ Sichern: `tar czf jura-backup-$(date +%F).tgz -C /opt/gutachten-trainer data` un
 
 ## Aktualisieren
 
-```bash
-cd /opt/gutachten-trainer && git pull
-npm install --omit=dev
-chown -R tipptrainer:tipptrainer /opt/gutachten-trainer
-systemctl restart gutachten-trainer
-```
+Ohne Terminal: **Einstellungen › Aktualisieren › Jetzt aktualisieren**. Der Knopf holt den neuesten Stand aus dem Git-Repo, installiert Pakete nur bei Änderungen und startet nur den Tipptrainer neu. Der Tunnel läuft weiter. Die Seite lädt danach von selbst neu.
 
-Der Ordner `data` und die Datei `.env` bleiben dabei unverändert.
+Einmalig nach dem Umstieg auf diese Version musst du `bash install.sh` in `/opt/gutachten-trainer` ausführen, damit der Update-Dienst eingerichtet wird. Das ist gefahrlos wiederholbar und fragt kein Passwort erneut, wenn schon eins gesetzt ist.
+
+Der Ordner `data` und die Datei `.env` bleiben bei jedem Update unverändert. Das Protokoll eines Laufs steht in `data/update.log`.
 
 ## Kosten der KI
 

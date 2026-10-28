@@ -252,3 +252,33 @@ footer{color:var(--muted);font-size:.85rem;max-width:80ch}
 
 .keyform{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .keyform input{flex:1 1 220px;min-width:0}
+
+/* Lernbereich im Stil von jura-online.de: blaue Seitenleiste mit Rechtsgebieten, weiße Kopfzeile, blaue Reiter */
+.shell{display:grid;grid-template-columns:270px minmax(0,1fr);min-height:100vh}
+.side{background:#0E3A8A;color:#fff;position:sticky;top:0;height:100vh;overflow-y:auto;padding-bottom:24px}
+.side-head{font:700 .72rem var(--body);text-transform:uppercase;letter-spacing:.12em;color:#9DB8E8;background:#0A2D6E;padding:14px 18px}
+#tree details{border-top:1px solid #1B4FA5}
+#tree summary{list-style:none;cursor:pointer;padding:13px 18px;font-weight:700;color:#fff;display:flex;justify-content:space-between;align-items:center}
+#tree summary::-webkit-details-marker{display:none}
+#tree summary::after{content:"▾";opacity:.7}
+#tree details:not([open])>summary::after{content:"▸"}
+#tree details.tg{border-top:1px solid #C9D8F1}
+#tree details.tg>summary{background:#E8EFFA;color:#1450B4;font-weight:600;padding:11px 18px 11px 30px;font-size:.93rem}
+#tree details.tg>summary::after{color:#1450B4}
+.unit-link{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;background:#fff;border:0;border-top:1px solid #E3EAF6;padding:10px 18px 10px 42px;color:#1450B4;font:inherit;font-size:.92rem;cursor:pointer}
+.unit-link::after{content:"›";font-size:1.2rem;color:#1450B4}
+.unit-link:hover{background:#F2F6FD}
+.unit-link:focus-visible{outline:2px solid #1450B4;outline-offset:-2px}
+.side-empty{padding:14px 18px;color:#B7C9E8;font-size:.9rem;margin:0}
+.content{min-width:0;background:#EAF1FC;min-height:100vh}
+.content .topbar{background:#fff;border-bottom:1px solid #D7E2F3;box-shadow:0 1px 0 rgba(14,58,138,.04)}
+.content .brand{color:#0E3A8A;letter-spacing:.06em;text-transform:uppercase;font-size:1.05rem}
+.content .brand span{color:#1450B4}
+.content .tabs{background:none;border:0;padding:0;gap:2px}
+.content .tab{color:#2B4A7E;font-weight:600;border-radius:6px}
+.content .tab[aria-selected="true"]{background:#1450B4;color:#fff}
+.content .wrap{padding-top:18px}
+@media (max-width:820px){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .side{position:static;height:auto;max-height:45vh}
+}

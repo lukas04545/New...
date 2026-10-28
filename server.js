@@ -25,6 +25,11 @@ const TRASH_DIR = path.join(DATA_DIR, "papierkorb");
 const CONFIG_FILE = path.join(DATA_DIR, "config.json");
 const ENV_DS_KEY = (process.env.DEEPSEEK_API_KEY || "").trim();
 const AI_KEY_FILE = path.join(DATA_DIR, "ai-key.json");
+// Update: der Browser legt eine Anfrage ab, ein Root-Dienst (gutachten-update) führt update.sh aus.
+const UPDATE_REQ = path.join(DATA_DIR, "update.request");
+const UPDATE_STATUS = path.join(DATA_DIR, "update-status.json");
+const UPDATE_LOG = path.join(DATA_DIR, "update.log");
+const APP_VERSION = (() => { try { return require("child_process").execFileSync("git", ["-C", APP_DIR, "rev-parse", "--short", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch (e) { return ""; } })();
 const DS_MODEL = (process.env.DEEPSEEK_MODEL || "deepseek-chat").trim();
 const DS_URL = (process.env.DEEPSEEK_URL || "https://api.deepseek.com/chat/completions").trim();
 const SESSION_DAYS = parseInt(process.env.SESSION_DAYS || "30", 10);
@@ -245,7 +250,7 @@ async function handle(req, res) {
 
   if (p === "/api/me") {
     const stored = readAiKey(), key = stored || ENV_DS_KEY;
-    return send(res, 200, { ai: !!key, aiHint: key.slice(-4), aiSource: stored ? "settings" : ENV_DS_KEY ? "env" : "", model: DS_MODEL, dataDir: DATA_DIR });
+    return send(res, 200, { ai: !!key, aiHint: key.slice(-4), aiSource: stored ? "settings" : ENV_DS_KEY ? "env" : "", model: DS_MODEL, dataDir: DATA_DIR, version: APP_VERSION });
   }
   if (p === "/api/settings/ai-key" && req.method === "PUT") {
     const { key } = await readJSON(req, 10_000);
@@ -254,6 +259,18 @@ async function handle(req, res) {
     await fsp.writeFile(AI_KEY_FILE, JSON.stringify({ key: k }), { mode: 0o600 });
     await fsp.chmod(AI_KEY_FILE, 0o600);
     return send(res, 200, { ok: true, hint: k.slice(-4) });
+  }
+  if (p === "/api/update" && req.method === "POST") {
+    if (fs.existsSync(UPDATE_REQ)) return send(res, 409, { code: "busy" });
+    const since = new Date().toISOString();
+    await fsp.writeFile(UPDATE_REQ, since);
+    return send(res, 202, { ok: true, since });
+  }
+  if (p === "/api/update/status" && req.method === "GET") {
+    let st = {};
+    try { st = JSON.parse(await fsp.readFile(UPDATE_STATUS, "utf8")); } catch (e) { /* noch kein Lauf */ }
+    const log = await fsp.readFile(UPDATE_LOG, "utf8").catch(() => "");
+    return send(res, 200, { ...st, log: log.slice(-4000) });
   }
   if (p === "/api/settings/ai-key" && req.method === "DELETE") {
     await fsp.rm(AI_KEY_FILE, { force: true });

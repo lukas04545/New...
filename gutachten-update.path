@@ -1,0 +1,9 @@
+[Unit]
+Description=Überwacht Update-Anfragen des Gutachten-Tipptrainers
+
+[Path]
+PathExists=/opt/gutachten-trainer/data/update.request
+Unit=gutachten-update.service
+
+[Install]
+WantedBy=multi-user.target
