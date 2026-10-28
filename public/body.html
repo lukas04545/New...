@@ -194,7 +194,14 @@
         </div>
         <div class="card" id="settings">
           <h2>Server</h2>
-          <div class="field"><p class="lbl">KI für Übungen und Korrektur</p><p class="msg" id="aiState">Wird geladen …</p></div>
+          <div class="field"><p class="lbl">KI für Übungen und Korrektur</p><p class="msg" id="aiState">Wird geladen …</p>
+            <form class="keyform" id="aiForm" autocomplete="off">
+              <input type="password" id="aiKey" placeholder="DeepSeek-API-Schlüssel" aria-label="DeepSeek-API-Schlüssel" autocomplete="off" spellcheck="false">
+              <button class="pbtn small" type="submit">Speichern</button>
+              <button class="pbtn small ghost" type="button" id="aiDel">Entfernen</button>
+            </form>
+            <p class="msg" id="aiMsg"></p>
+          </div>
           <div class="field"><p class="lbl">Ablage</p><p class="msg" id="storeState"></p></div>
           <div class="row-btn"><button class="pbtn ghost small" id="logout" type="button">Abmelden</button></div>
         </div>

@@ -1174,13 +1174,40 @@ ${this.material(n).slice(0,60000)}`,{json:true,onText:({text})=>this.msg(`DeepSe
 
 /* ---------- Einstellungen und Start ---------- */
 $("logout").addEventListener("click",async()=>{M.flush();try{await fetch("/api/logout",{method:"POST"});}catch(e){} location.href="/login";});
+
+/* ---------- DeepSeek-Schlüssel in den Einstellungen ---------- */
+function renderAiState(me){
+  SERVER.ai=!!me.ai; SERVER.model=me.model||"";
+  $("aiState").textContent=me.ai
+    ? `DeepSeek über den Server, Modell ${me.model}. Schlüssel endet auf …${me.aiHint}${me.aiSource==="env"?" (aus der .env-Datei)":""}. Er bleibt auf dem Server.`
+    : "Keine KI eingerichtet. Trag unten deinen DeepSeek-API-Schlüssel ein.";
+  $("aiDel").hidden=me.aiSource!=="settings";
+}
+$("aiForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const key=$("aiKey").value.trim(); if(!key) return;
+  try{
+    await apiJSON("/api/settings/ai-key",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({key})});
+    $("aiKey").value=""; renderAiState(await apiJSON("/api/me"));
+    $("aiMsg").className="msg ok"; $("aiMsg").textContent="Schlüssel gespeichert.";
+  }catch(err){
+    $("aiMsg").className="msg err";
+    $("aiMsg").textContent=err.code==="bad_key"?"Das sieht nicht nach einem gültigen DeepSeek-Schlüssel aus.":"Speichern fehlgeschlagen.";
+  }
+});
+$("aiDel").addEventListener("click",async()=>{
+  try{
+    await apiJSON("/api/settings/ai-key",{method:"DELETE"});
+    renderAiState(await apiJSON("/api/me"));
+    $("aiMsg").className="msg ok"; $("aiMsg").textContent="Schlüssel entfernt.";
+  }catch(err){$("aiMsg").className="msg err"; $("aiMsg").textContent="Entfernen fehlgeschlagen.";}
+});
 async function boot(){
   units=[]; refreshCases(); renderLib(); M.init();
   go(location.hash.slice(1)||"trainer");
   let me;
   try{me=await apiJSON("/api/me");}catch(e){ if(e?.code!=="login") toast("Server nicht erreichbar."); return; }
-  SERVER.ai=!!me.ai; SERVER.model=me.model||"";
-  $("aiState").textContent=me.ai?`DeepSeek über den Server, Modell ${me.model}. Der Schlüssel liegt nur auf dem Server.`:"Keine KI eingerichtet. Trag DEEPSEEK_API_KEY in die Datei .env auf dem Server ein und starte den Dienst neu.";
+  renderAiState(me);
   $("storeState").textContent=`Alles liegt auf deinem Server im Ordner ${me.dataDir}: Einheiten und Mitschriften in „db“, Originale und Übersichten in „ablage“, sortiert nach Rechtsgebiet › Teilgebiet › Datum Thema.`;
   try{
     const docs=await apiJSON("/api/docs");

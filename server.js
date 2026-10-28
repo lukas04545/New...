@@ -23,7 +23,8 @@ const META_DIR = path.join(DATA_DIR, "meta");
 const ABLAGE_DIR = path.join(DATA_DIR, "ablage");
 const TRASH_DIR = path.join(DATA_DIR, "papierkorb");
 const CONFIG_FILE = path.join(DATA_DIR, "config.json");
-const DS_KEY = (process.env.DEEPSEEK_API_KEY || "").trim();
+const ENV_DS_KEY = (process.env.DEEPSEEK_API_KEY || "").trim();
+const AI_KEY_FILE = path.join(DATA_DIR, "ai-key.json");
 const DS_MODEL = (process.env.DEEPSEEK_MODEL || "deepseek-chat").trim();
 const DS_URL = (process.env.DEEPSEEK_URL || "https://api.deepseek.com/chat/completions").trim();
 const SESSION_DAYS = parseInt(process.env.SESSION_DAYS || "30", 10);
@@ -42,6 +43,9 @@ function loadEnv(file) {
 
 /* ---------- Passwort und Sitzungen ---------- */
 function readConfig() { try { return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")); } catch (e) { return null; } }
+/* Der DeepSeek-Schlüssel kommt bevorzugt aus den Einstellungen (Datei im Datenordner, nur für den Dienst lesbar), sonst aus der .env. */
+function readAiKey() { try { return JSON.parse(fs.readFileSync(AI_KEY_FILE, "utf8")).key || ""; } catch (e) { return ""; } }
+function currentAiKey() { return readAiKey() || ENV_DS_KEY; }
 function hashPassword(pw, salt) { return crypto.scryptSync(pw, salt, 64, { N: 16384, r: 8, p: 1 }).toString("hex"); }
 
 async function setPasswordCli() {
@@ -175,7 +179,8 @@ if(r.ok){location.href="/";return;}const b=await r.json().catch(()=>({}));docume
 
 /* ---------- KI-Weiterleitung an DeepSeek ---------- */
 async function handleAI(req, res) {
-  if (!DS_KEY) return send(res, 503, { code: "no_key" });
+  const key = currentAiKey();
+  if (!key) return send(res, 503, { code: "no_key" });
   const { prompt, json } = await readJSON(req, 600_000);
   if (typeof prompt !== "string" || !prompt.trim()) return send(res, 400, { code: "bad_request" });
   const ctl = new AbortController();
@@ -190,7 +195,7 @@ async function handleAI(req, res) {
   if (json) body.response_format = { type: "json_object" };
   let up;
   try {
-    up = await fetch(DS_URL, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + DS_KEY }, body: JSON.stringify(body), signal: ctl.signal });
+    up = await fetch(DS_URL, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key }, body: JSON.stringify(body), signal: ctl.signal });
   } catch (e) { return send(res, 502, { code: "network" }); }
   if (!up.ok) {
     const t = await up.text().catch(() => "");
@@ -238,7 +243,22 @@ async function handle(req, res) {
     return serveFile(req, res, path.join(NM, "tesseract.js-core", f), "public, max-age=604800");
   }
 
-  if (p === "/api/me") return send(res, 200, { ai: !!DS_KEY, model: DS_MODEL, dataDir: DATA_DIR });
+  if (p === "/api/me") {
+    const stored = readAiKey(), key = stored || ENV_DS_KEY;
+    return send(res, 200, { ai: !!key, aiHint: key.slice(-4), aiSource: stored ? "settings" : ENV_DS_KEY ? "env" : "", model: DS_MODEL, dataDir: DATA_DIR });
+  }
+  if (p === "/api/settings/ai-key" && req.method === "PUT") {
+    const { key } = await readJSON(req, 10_000);
+    const k = typeof key === "string" ? key.trim() : "";
+    if (!/^[\w.-]{16,200}$/.test(k)) return send(res, 400, { code: "bad_key" });
+    await fsp.writeFile(AI_KEY_FILE, JSON.stringify({ key: k }), { mode: 0o600 });
+    await fsp.chmod(AI_KEY_FILE, 0o600);
+    return send(res, 200, { ok: true, hint: k.slice(-4) });
+  }
+  if (p === "/api/settings/ai-key" && req.method === "DELETE") {
+    await fsp.rm(AI_KEY_FILE, { force: true });
+    return send(res, 200, { ok: true });
+  }
 
   if (p === "/api/docs" && req.method === "GET") {
     const files = (await fsp.readdir(DB_DIR)).filter((f) => f.endsWith(".json"));
@@ -298,7 +318,7 @@ async function main() {
   if (!readConfig()) { console.error("Noch kein Passwort gesetzt. Führe zuerst aus: npm run passwort"); process.exit(1); }
   for (const d of [DB_DIR, META_DIR, ABLAGE_DIR]) await fsp.mkdir(d, { recursive: true });
   if (!fs.existsSync(path.join(NM, "pdfjs-dist"))) console.warn("Hinweis: Bibliotheken fehlen, die Seite lädt sie dann aus dem Internet. Führe 'npm install' aus.");
-  if (!DS_KEY) console.warn("Hinweis: Kein DEEPSEEK_API_KEY in .env. KI-Funktionen sind aus.");
+  if (!currentAiKey()) console.warn("Hinweis: Noch kein DeepSeek-Schlüssel. Trag ihn unter „Server“ in den Einstellungen ein. KI-Funktionen sind bis dahin aus.");
   http.createServer((req, res) => {
     handle(req, res).catch((e) => {
       if (!res.headersSent) send(res, e.status || 500, { code: e.status === 413 ? "too_large" : e.status === 400 ? "bad_request" : "server" });

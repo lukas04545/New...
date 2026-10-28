@@ -12,6 +12,8 @@ Der Tipptrainer lauscht nur auf `127.0.0.1:3000`. Von außen erreichbar ist er a
 
 ## 1. Cloudflare-Tunnel anlegen (im Browser)
 
+Läuft auf dem Server schon ein Tunnel, etwa für ff, nimm dessen Token und überspringe das Anlegen. Du musst dann nur im selben Tunnel einen neuen Public Hostname hinzufügen (siehe Punkt 4 in diesem Abschnitt).
+
 1. Im Cloudflare-Dashboard: **Zero Trust › Networks › Tunnels › Create a tunnel › Cloudflared**.
 2. Einen Namen vergeben, z. B. `tipptrainer`.
 3. Bei der Installation erscheint ein Befehl mit einem langen Token (`eyJ…`). Kopiere nur das Token, den Rest brauchst du nicht.
@@ -25,10 +27,12 @@ Auf dem Server als `root` ausführen. Ersetze die beiden Werte in Hochkommas:
 apt-get update && apt-get install -y git
 git clone https://github.com/lukas04545/New... /opt/gutachten-trainer
 cd /opt/gutachten-trainer
-TUNNEL_TOKEN='DEIN-TUNNEL-TOKEN' DEEPSEEK_API_KEY='DEIN-DEEPSEEK-SCHLÜSSEL' bash install.sh
+TUNNEL_TOKEN='DEIN-TUNNEL-TOKEN' bash install.sh
 ```
 
-Das Skript installiert Node.js 20 und `cloudflared`, legt den Systembenutzer `tipptrainer` an, installiert die Abhängigkeiten, startet den Dienst und richtet den Tunnel als Dienst ein. Zum Schluss fragt es nach dem Passwort (mindestens 10 Zeichen).
+Das Skript installiert Node.js 20, legt den Systembenutzer `tipptrainer` an, installiert die Abhängigkeiten und startet den Dienst. `cloudflared` wird nur installiert, wenn es fehlt. Läuft es schon für ff, bleibt der bestehende Dienst unverändert. Zum Schluss fragt es nach dem Passwort (mindestens 10 Zeichen).
+
+Den DeepSeek-Schlüssel trägst du danach im Browser ein: **Einstellungen › Server › DeepSeek-API-Schlüssel › Speichern**. Er wird auf dem Server in einer Datei gespeichert, die nur der Dienst lesen kann. Alternativ geht auch `DEEPSEEK_API_KEY=` in der `.env`, die Einstellung im Browser hat aber Vorrang.
 
 Falls das Repo privat ist, bitte vorher einen GitHub-Zugang einrichten. Ohne Git kannst du das Projekt auch per `scp` hochladen und das Skript im Ordner starten.
 
