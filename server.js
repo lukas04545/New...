@@ -206,7 +206,7 @@ async function handleAI(req, res) {
     const t = await up.text().catch(() => "");
     const code = up.status === 401 ? "auth" : up.status === 402 ? "balance" : up.status === 429 ? "rate_limited" : /context|too long|maximum/i.test(t) ? "too_large" : up.status === 400 ? "bad_model" : "http";
     console.error(`[ki] DeepSeek ${up.status}: ${t.slice(0, 300)}`);
-    return send(res, 502, { code });
+    return send(res, 502, { code, status: up.status });
   }
   res.writeHead(200, { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" });
   try { for await (const chunk of up.body) res.write(chunk); }
