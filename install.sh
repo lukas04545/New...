@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Installiert den Gutachten-Tipptrainer auf einem frischen Ubuntu- oder Debian-Server.
-# Der Dienst lauscht nur lokal; nach außen geht es über einen Cloudflare-Tunnel (HTTPS).
+# Der Dienst lauscht nur lokal (127.0.0.1:3000). Nach außen geht es über einen Cloudflare-Tunnel mit HTTPS.
 #
 # Aufruf als root, im Projektordner (/opt/gutachten-trainer):
-#   TUNNEL_TOKEN='...' bash install.sh
-# TUNNEL_TOKEN ist der Token des bestehenden Cloudflare-Tunnels (derselbe wie für ff).
-# Den DeepSeek-Schlüssel kannst du auch später im Browser unter Einstellungen eintragen.
+#   bash install.sh
+#
+# Ohne Token entsteht ein Quick Tunnel: kein Konto, keine Domain, keine Zugangsdaten.
+# Die Adresse hat die Form https://xyz.trycloudflare.com und ändert sich, wenn der Tunnel neu startet.
+# Optional: TUNNEL_TOKEN='...' bash install.sh nutzt einen festen Tunnel mit eigener Domain.
 set -euo pipefail
 
 APP=/opt/gutachten-trainer
@@ -21,7 +23,7 @@ if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split("."
   apt-get install -y -qq nodejs
 fi
 
-if [ -n "${TUNNEL_TOKEN:-}" ] && ! command -v cloudflared >/dev/null; then
+if ! command -v cloudflared >/dev/null; then
   echo "==> cloudflared"
   mkdir -p --mode=0755 /usr/share/keyrings
   curl -fsSL https://pkg.cloudflare.com/cloudflare-public-v2.gpg -o /usr/share/keyrings/cloudflare-public-v2.gpg
@@ -54,17 +56,24 @@ cp gutachten-trainer.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now gutachten-trainer
 
+echo "==> Tunnel"
 if [ -n "${TUNNEL_TOKEN:-}" ]; then
-  echo "==> Cloudflare-Tunnel"
   if systemctl cat cloudflared >/dev/null 2>&1; then
-    echo "cloudflared läuft schon als Dienst (z. B. für ff). Er wird nicht neu eingerichtet."
+    echo "cloudflared läuft schon als Dienst. Er wird nicht neu eingerichtet."
   else
     cloudflared service install "$TUNNEL_TOKEN"
   fi
+  echo "Im Cloudflare-Dashboard, im Tunnel mit diesem Token: Public Hostname › Service HTTP://localhost:3000"
+else
+  cp gutachten-tunnel.service /etc/systemd/system/
+  systemctl daemon-reload
+  systemctl enable --now gutachten-tunnel
+  sleep 10
+  URL=$(journalctl -u gutachten-tunnel --no-pager 2>/dev/null | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1 || true)
+  echo "Deine Adresse: ${URL:-noch nicht bereit. Gleich prüfen: journalctl -u gutachten-tunnel | grep trycloudflare}"
 fi
 
 echo
 echo "Fertig. Prüfe: systemctl status gutachten-trainer"
 echo "Den DeepSeek-Schlüssel trägst du im Browser unter Einstellungen › Server ein, falls du ihn nicht oben angegeben hast."
-[ -n "${TUNNEL_TOKEN:-}" ] && echo "Im Cloudflare-Dashboard, im Tunnel mit diesem Token: Public Hostname für den Tipptrainer › Service HTTP://localhost:3000"
 exit 0

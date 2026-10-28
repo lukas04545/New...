@@ -1,0 +1,14 @@
+[Unit]
+Description=Cloudflare Quick Tunnel für den Gutachten-Tipptrainer
+After=network-online.target gutachten-trainer.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate --url http://localhost:3000
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
