@@ -1,0 +1,20 @@
+[Unit]
+Description=Gutachten-Tipptrainer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tipptrainer
+WorkingDirectory=/opt/gutachten-trainer
+ExecStart=/usr/bin/node /opt/gutachten-trainer/server.js
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/gutachten-trainer/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

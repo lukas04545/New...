@@ -1,0 +1,19 @@
+{
+  "name": "gutachten-tipptrainer",
+  "version": "1.0.0",
+  "description": "Zehnfingerschreiben im Gutachtenstil, E-Examen-Editor, Mitschrift nach der Cornell-Methode und Vorlesungsnachbereitung. Für den eigenen Server.",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "passwort": "node server.js passwort"
+  },
+  "engines": { "node": ">=18" },
+  "optionalDependencies": {
+    "pdfjs-dist": "3.11.174",
+    "mammoth": "1.6.0",
+    "tesseract.js": "5.1.1",
+    "tesseract.js-core": "5.1.1",
+    "@tesseract.js-data/deu": "1.0.0"
+  }
+}

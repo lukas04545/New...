@@ -1,0 +1,195 @@
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Gutachten<span>·</span>Tipptrainer</h1>
+      <p class="sub">Zehn Finger, Gutachtenstil und E-Examen in einem. Für die Erste Juristische Prüfung in Baden-Württemberg.</p>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Bereiche">
+      <button class="tab" role="tab" data-view="trainer" type="button">Tipptrainer</button>
+      <button class="tab" role="tab" data-view="examen" type="button">E-Examen</button>
+      <button class="tab" role="tab" data-view="mitschrift" type="button">Mitschrift</button>
+      <button class="tab" role="tab" data-view="vorlesungen" type="button">Vorlesungen</button>
+    </nav>
+  </header>
+
+  <div class="toolbar" id="collbar">
+    <div class="field"><label class="lbl" for="coll">Sammlung</label><select id="coll"></select></div>
+    <p class="sub" id="best"></p>
+  </div>
+
+  <!-- TIPPTRAINER -->
+  <section id="v-trainer" class="view" style="display:grid;gap:18px">
+    <div class="cases" id="cases" role="group" aria-label="Fall auswählen"></div>
+    <div class="main">
+      <aside class="rail" aria-label="Aufbau des Gutachtens">
+        <p class="lbl" style="margin-bottom:6px">Aufbau</p>
+        <div class="step" data-p="O"><span class="n">1</span><b>Obersatz</b><i>Hypothese im Konjunktiv: „könnte … haben“, „müsste … sein“</i></div>
+        <div class="step" data-p="D"><span class="n">2</span><b>Definition</b><i>Merkmal abstrakt: „… ist …, wenn …“</i></div>
+        <div class="step" data-p="S"><span class="n">3</span><b>Subsumtion</b><i>Sachverhalt unter die Definition: „Hier …“, „Vorliegend …“</i></div>
+        <div class="step" data-p="E"><span class="n">4</span><b>Ergebnis</b><i>Im Indikativ: „Somit …“, „Folglich …“</i></div>
+      </aside>
+      <section class="panel" aria-label="Tippfeld">
+        <div class="stats">
+          <div class="stat"><strong id="apm">0</strong><span>Anschläge/min</span></div>
+          <div class="stat"><strong id="acc">100</strong><span>% genau</span></div>
+          <div class="stat"><strong id="err">0</strong><span>Fehler</span></div>
+          <div class="stat"><strong id="prog">0</strong><span>% geschafft</span></div>
+          <span class="grow"></span>
+          <button class="tbtn" id="restart" type="button">Neu starten (Esc)</button>
+        </div>
+        <div class="text" id="text"></div>
+        <input id="trap" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Eingabe">
+        <button class="blur" id="blur" type="button" hidden>Hier klicken und losschreiben</button>
+        <div class="hint" id="hint"></div>
+        <div class="done-card" id="doneCard" hidden></div>
+      </section>
+    </div>
+    <div>
+      <div class="kb-wrap"><div class="kb" id="kb"></div></div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </section>
+
+  <!-- E-EXAMEN -->
+  <section id="v-examen" class="view" style="display:none;gap:16px">
+    <div class="toolbar">
+      <div class="field"><label class="lbl" for="xcase">Aufgabe</label><select id="xcase"></select></div>
+      <div class="field"><label class="lbl" for="xmode">Modus</label>
+        <select id="xmode"><option value="copy">Abschreiben: Musterlösung abtippen</option><option value="exam">Klausur: selbst lösen</option></select></div>
+      <div class="field"><label class="lbl" for="xtime">Bearbeitungszeit</label>
+        <select id="xtime"><option value="15">15 Minuten</option><option value="30" selected>30 Minuten</option><option value="60">1 Stunde</option><option value="120">2 Stunden</option><option value="300">5 Stunden (Examen)</option></select></div>
+      <button class="pbtn" id="xstart" type="button">Bearbeitung beginnen</button>
+    </div>
+
+    <div class="xframe" id="xframe">
+      <div class="xbar">
+        <b>Erste Juristische Prüfung · Übung</b>
+        <span class="grow"></span>
+        <span>Restzeit</span><span class="xclock" id="xclock">00:30:00</span>
+        <button class="tbtn" id="xcontrast" type="button" title="Farbmodus: Standard oder hoher Kontrast">Kontrast</button>
+        <button class="tbtn" id="xlockbtn" type="button" title="Bildschirmsperre">Sperren</button>
+        <button class="tbtn end" id="xend" type="button">Prüfung beenden</button>
+      </div>
+      <div class="xtools" id="xtools" role="toolbar" aria-label="Werkzeugleiste"></div>
+      <div class="xfind" id="xfind" role="search" hidden>
+        <input type="text" id="fq" placeholder="Suchen" aria-label="Suchen" autocomplete="off" spellcheck="false">
+        <button class="xbtn" id="fprev" type="button" title="Vorheriger Treffer (Umschalt+Enter)" aria-label="Vorheriger Treffer">↑</button>
+        <button class="xbtn" id="fnext" type="button" title="Nächster Treffer (Enter)" aria-label="Nächster Treffer">↓</button>
+        <span class="fcount" id="fcount">0 Treffer</span>
+        <input type="text" id="fr" placeholder="Ersetzen durch" aria-label="Ersetzen durch" autocomplete="off" spellcheck="false">
+        <button class="tbtn" id="frep" type="button">Ersetzen</button>
+        <button class="tbtn" id="frepall" type="button">Alle ersetzen</button>
+        <label><input type="checkbox" id="fcase"> Groß-/Kleinschreibung</label>
+        <span class="grow"></span>
+        <button class="xbtn" id="fclose" type="button" title="Schließen (Esc)" aria-label="Suche schließen">×</button>
+      </div>
+      <div class="xbody">
+        <div class="xtask" id="xtask"></div>
+        <div class="xdesk"><div class="xpage" id="xpage" contenteditable="false" spellcheck="false" autocorrect="off" autocapitalize="off" aria-label="Bearbeitung"></div></div>
+      </div>
+      <div class="xstatus">
+        <span>Zeichen <b id="xchars">0</b></span>
+        <span>Wörter <b id="xwords">0</b></span>
+        <span>Anschläge/min <b id="xapm">0</b></span>
+        <span>Suchen und Ersetzen mit Strg+F. Keine Rechtschreibprüfung, keine automatische Gliederung, Einfügen nur als reiner Text.</span>
+      </div>
+      <div class="xlock" id="xlock" hidden><b>Bildschirm gesperrt</b><button class="pbtn ghost" id="xunlock" type="button" style="color:var(--xbar-ink);border-color:var(--xbar-ink)">Entsperren</button></div>
+    </div>
+    <div class="result" id="xresult" hidden></div>
+  </section>
+
+  <!-- MITSCHRIFT -->
+  <section id="v-mitschrift" class="view" style="display:none">
+    <div class="mgrid">
+      <aside class="card mside">
+        <button class="pbtn" id="mNew" type="button">Neue Mitschrift</button>
+        <input type="text" id="mSearch" placeholder="Mitschriften durchsuchen" aria-label="Mitschriften durchsuchen">
+        <div id="mList" class="mlist"></div>
+      </aside>
+      <div class="mwork">
+        <div class="mhead">
+          <div class="field"><label class="lbl" for="mThema">Thema</label><input type="text" id="mThema" placeholder="z. B. Anfechtung wegen Irrtums"></div>
+          <div class="field"><label class="lbl" for="mVer">Veranstaltung</label><input type="text" id="mVer" placeholder="z. B. BGB AT, Prof. Müller"></div>
+          <div class="field"><label class="lbl" for="mRg">Rechtsgebiet</label><select id="mRg"><option value="">Wählen</option><option>Zivilrecht</option><option>Strafrecht</option><option>Öffentliches Recht</option><option>Grundlagen</option></select></div>
+          <div class="field"><label class="lbl" for="mDate">Datum</label><input type="date" id="mDate"></div>
+        </div>
+        <div class="mbar"><div class="mtools" id="mTools" role="toolbar" aria-label="Markierungen"></div><span class="grow"></span><span class="msg" id="mState"></span></div>
+        <div class="cornell" id="cornell">
+          <div class="cpart ccues"><label class="lbl" for="mCues">Stichworte und Prüfungsfragen</label><textarea id="mCues" spellcheck="false" placeholder="Nach der Vorlesung: Schlüsselbegriffe, Normen und Fragen, mit denen du dich später abfragst."></textarea></div>
+          <div class="cpart cnotes"><label class="lbl" for="mNotes">Notizen während der Vorlesung</label><textarea id="mNotes" spellcheck="false" placeholder="A. Anfechtung&#10;§ 142 Abs. 1 BGB&#10;D: Inhaltsirrtum: Der Erklärende irrt über die Bedeutung seiner Erklärung.&#10;S: Ist der Kalkulationsirrtum beachtlich?&#10;A: h. M.: grds. unbeachtlicher Motivirrtum&#10;+ Risikosphäre des Erklärenden&#10;P: I. Anfechtungserklärung"></textarea><div class="mrender" id="mRender"></div><div class="mcover">Notizen abgedeckt. Beantworte die Fragen links, dann deck auf.</div></div>
+          <div class="cpart csum"><label class="lbl" for="mSum">Zusammenfassung</label><textarea id="mSum" placeholder="Nach der Vorlesung in drei bis fünf Sätzen: Was muss ich mir merken?"></textarea></div>
+        </div>
+        <div class="row-btn">
+          <button class="pbtn ghost small" id="mView" type="button" aria-pressed="false">Ansicht</button>
+          <button class="pbtn ghost small" id="mLearn" type="button" aria-pressed="false">Lernmodus: Notizen abdecken</button>
+          <button class="pbtn ghost small" id="mCueFill" type="button">Stichworte aus Markierungen</button>
+          <button class="pbtn ghost small" id="mParse" type="button">Markiertes zum Tippen übernehmen</button>
+          <button class="pbtn small" id="mAiCues" type="button">KI: Fragen und Zusammenfassung</button>
+          <button class="pbtn small" id="mAiUnit" type="button">KI: Übungen erzeugen</button>
+          <span class="grow"></span>
+          <button class="pbtn ghost small" id="mExport" type="button">Exportieren</button>
+          <button class="pbtn small danger" id="mDel" type="button">Löschen</button>
+        </div>
+        <p class="msg" id="mMsg"></p>
+        <details class="setup"><summary>So schreibst du schnell mit</summary><ol>
+          <li>Rechts schreibst du während der Vorlesung. Gliederungspunkte wie <code>A.</code>, <code>I.</code>, <code>1.</code>, <code>a)</code> werden automatisch als Überschrift erkannt.</li>
+          <li>Markiere Zeilen mit <code>Alt</code> + Buchstabe: N Norm, D Definition (<code>Begriff: Definition</code>), S Streitfrage, A Ansicht (<code>BGH: Inhalt</code>), G Argument zur Ansicht darüber, P Schemapunkt, M Merksatz, F offene Frage.</li>
+          <li>Enter setzt Schemapunkte, Ansichten und Argumente in der nächsten Zeile fort. Tab rückt ein, Umschalt+Tab rückt aus.</li>
+          <li>Nach der Vorlesung füllst du links Stichworte und Prüfungsfragen und unten die Zusammenfassung, selbst oder per KI.</li>
+          <li>Zum Wiederholen: Lernmodus an, Fragen links beantworten, dann aufdecken.</li>
+        </ol></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- VORLESUNGEN -->
+  <section id="v-vorlesungen" class="view" style="display:none">
+    <div class="vgrid">
+      <div style="display:grid;gap:18px">
+        <div class="card">
+          <h2>Vorlesung nachbereiten</h2>
+          <p class="msg">Lade Skript, Folien oder Mitschrift hoch. Die KI macht daraus Gutachten-Übungen, Definitionen und Streitstände zum Abtippen und ordnet alles einem Rechtsgebiet zu.</p>
+          <label class="drop" id="drop" for="file">
+            <strong>Dateien hierher ziehen oder auswählen</strong>
+            <span>PDF (auch Foliensätze und eingescannte Folien), Word (.docx), Text oder Markdown</span>
+          </label>
+          <input type="file" id="file" multiple accept=".pdf,.docx,.txt,.md,application/pdf" hidden>
+          <div class="files" id="filelist"></div>
+          <div class="grid2">
+            <div class="field"><label class="lbl" for="vname">Veranstaltung</label><input type="text" id="vname" placeholder="z. B. Strafrecht AT, Prof. Müller"></div>
+            <div class="field"><label class="lbl" for="vrg">Rechtsgebiet</label>
+              <select id="vrg"><option value="">Automatisch erkennen</option><option>Zivilrecht</option><option>Strafrecht</option><option>Öffentliches Recht</option><option>Grundlagen</option></select></div>
+            <div class="field"><label class="lbl" for="vdate">Datum der Vorlesung</label><input type="date" id="vdate"></div>
+          </div>
+          <div class="row-btn">
+            <button class="pbtn" id="vgen" type="button" disabled>Übungen erzeugen</button>
+            <button class="pbtn ghost" id="vstop" type="button" hidden>Abbrechen</button>
+          </div>
+          <p class="msg" id="vmsg">Noch keine Datei gewählt.</p>
+        </div>
+        <div class="card">
+          <h2>Eigenen Gutachtentext übernehmen</h2>
+          <p class="msg">Ohne KI: Füge eine Lösungsskizze oder ein Gutachten ein. Die Sätze werden automatisch als Obersatz, Definition, Subsumtion oder Ergebnis markiert.</p>
+          <div class="grid2">
+            <div class="field"><label class="lbl" for="ptitle">Titel</label><input type="text" id="ptitle" placeholder="z. B. Mord, Heimtücke"></div>
+            <div class="field"><label class="lbl" for="pnorm">Norm</label><input type="text" id="pnorm" placeholder="§ 211 StGB"></div>
+          </div>
+          <div class="field"><label class="lbl" for="ptext">Gutachtentext</label><textarea id="ptext" placeholder="T könnte sich wegen Mordes gemäß § 211 StGB strafbar gemacht haben, …"></textarea></div>
+          <div class="row-btn"><button class="pbtn ghost" id="psave" type="button">Zerlegen und speichern</button><span class="msg" id="pmsg"></span></div>
+        </div>
+        <div class="card" id="settings">
+          <h2>Server</h2>
+          <div class="field"><p class="lbl">KI für Übungen und Korrektur</p><p class="msg" id="aiState">Wird geladen …</p></div>
+          <div class="field"><p class="lbl">Ablage</p><p class="msg" id="storeState"></p></div>
+          <div class="row-btn"><button class="pbtn ghost small" id="logout" type="button">Abmelden</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row-btn" style="justify-content:space-between"><h2>Deine Bibliothek</h2></div>
+        <div class="lib" id="lib"></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>Der Examenseditor bildet die Funktionen des Prüfungseditors nach, wie sie die Anwendungshinweise zum E-Examen beschreiben. Prüfe Details zusätzlich in der offiziellen Demo.</footer>
+</div>
