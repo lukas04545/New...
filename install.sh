@@ -62,7 +62,9 @@ chmod 600 .env
 echo "==> Dienst"
 cp gutachten-trainer.service /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now gutachten-trainer
+systemctl enable gutachten-trainer
+# restart statt --now: ein schon laufender Dienst muss die neue Version laden (die Seite wird im Speicher gehalten)
+systemctl restart gutachten-trainer
 
 echo "==> Tunnel"
 if [ -n "${TUNNEL_TOKEN:-}" ]; then
